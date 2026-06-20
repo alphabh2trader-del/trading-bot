@@ -43,3 +43,13 @@ All active skills are listed here. Never overwrite. Never remove without explici
 - Functions: `get_sentiment_score()`, `macro_environment_analysis()`, `sentiment_summary()`
 
 ---
+
+## 5. Volume Analysis
+
+- File: `src/skills/volume_analysis.py`
+- Status: ACTIVE
+- Added: 2026-06-19
+- Description: Confirms trade signals with volume. Checks volume vs 20-bar average, detects volume spikes, and identifies breakouts on high volume. Rejects entry signals where the confirmation candle is not backed by sufficient volume.
+- Functions: `check_volume_confirmation()`, `detect_volume_spike()`, `check_breakout_volume()`, `get_volume_signal()`
+
+---

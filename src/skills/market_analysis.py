@@ -26,6 +26,14 @@ def analyze(
     signal = check_entry_conditions(h4_df, trend, target_rr)
 
     if signal:
+        from src.skills.volume_analysis import get_volume_signal
+        vol = get_volume_signal(h4_df)
+        if not vol["confirmed"]:
+            signal = None
+        else:
+            signal.reason += f" | Vol {vol['ratio']:.1f}x avg"
+
+    if signal:
         signal.symbol = symbol
 
     last = h4_df.iloc[-1]
