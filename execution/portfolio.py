@@ -4,6 +4,7 @@ from pathlib import Path
 
 import config
 from data.market_data import fetch_bars_safe
+from src.execution.alpaca_bridge import get_positions
 
 TRADES_FILE = Path(__file__).parent.parent / "memory" / "trades.csv"
 
@@ -16,40 +17,40 @@ def get_open_trades() -> list[dict]:
 
 
 def check_tp_sl_hits(timeframe: str = "1Day") -> list[dict]:
+    """Sync open CSV trades with Alpaca — if a position is gone, Alpaca closed it via TP/SL."""
     open_trades = get_open_trades()
+    if not open_trades:
+        return []
+
+    alpaca_symbols = {p["symbol"] for p in get_positions()}
     closed = []
+
     for trade in open_trades:
         symbol = trade["symbol"]
-        direction = trade["direction"]
+        if symbol in alpaca_symbols:
+            continue  # position still open on Alpaca
+
+        # Position gone — determine outcome from last bar price vs TP/SL levels
         sl = float(trade["stop_loss"])
         tp = float(trade["take_profit"])
+        direction = trade["direction"]
 
         df = fetch_bars_safe(symbol, timeframe, timeout_sec=2.0)
-        if df is None or df.empty:
-            continue
-
-        last = df.iloc[-1]
-        high = last["high"]
-        low = last["low"]
-
-        hit = None
-        exit_price = None
-        if direction == "long":
-            if high >= tp:
-                hit, exit_price = "TP HIT", tp
-            elif low <= sl:
-                hit, exit_price = "SL HIT", sl
+        if df is not None and not df.empty:
+            last = df.iloc[-1]
+            if direction == "long":
+                hit = "TP HIT" if last["high"] >= tp else "SL HIT"
+                exit_price = tp if last["high"] >= tp else sl
+            else:
+                hit = "TP HIT" if last["low"] <= tp else "SL HIT"
+                exit_price = tp if last["low"] <= tp else sl
         else:
-            if low <= tp:
-                hit, exit_price = "TP HIT", tp
-            elif high >= sl:
-                hit, exit_price = "SL HIT", sl
+            hit, exit_price = "SL HIT", sl  # conservative fallback
 
-        if hit:
-            from execution.engine import close_paper_trade
-            result = close_paper_trade(trade["trade_id"], exit_price, hit)
-            if result:
-                closed.append(result)
+        from execution.engine import close_paper_trade
+        result = close_paper_trade(trade["trade_id"], exit_price, hit)
+        if result:
+            closed.append(result)
 
     return closed
 

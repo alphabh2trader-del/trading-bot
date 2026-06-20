@@ -4,7 +4,8 @@ from datetime import datetime
 from pathlib import Path
 
 import config
-from data.market_data import get_account, get_live_quote
+from data.market_data import get_live_quote
+from src.execution.alpaca_bridge import get_account, submit_bracket_order, close_position
 from memory.logger import log_execution_entry
 
 TRADES_FILE = Path(__file__).parent.parent / "memory" / "trades.csv"
@@ -14,7 +15,7 @@ FIELDNAMES = [
     "entry_price", "stop_loss", "take_profit",
     "position_size", "risk_pct", "risk_usd", "potential_usd",
     "status", "exit_price", "exit_timestamp", "pnl_pct", "pnl_usd",
-    "fees_usd", "net_pnl_usd", "notes",
+    "fees_usd", "net_pnl_usd", "alpaca_order_id", "notes",
 ]
 
 
@@ -23,9 +24,23 @@ def open_paper_trade(setup: dict) -> dict:
     equity = account["equity"]
     entry = setup["entry_price"]
     sl = setup["stop_loss"]
+    tp = setup["take_profit"]
     risk_per_share = abs(entry - sl)
     risk_usd = equity * (config.MAX_RISK_PER_TRADE / 100)
-    size = risk_usd / risk_per_share if risk_per_share > 0 else 0
+    size = round(risk_usd / risk_per_share, 2) if risk_per_share > 0 else 0
+
+    # Submit bracket order to Alpaca — TP and SL are handled automatically
+    try:
+        order = submit_bracket_order(
+            symbol=setup["symbol"],
+            qty=size,
+            side=setup["direction"],
+            take_profit_price=tp,
+            stop_loss_price=sl,
+        )
+        alpaca_order_id = order["order_id"]
+    except Exception as e:
+        alpaca_order_id = f"ERROR:{e}"
 
     trade = {
         "trade_id": str(uuid.uuid4())[:8],
@@ -34,11 +49,11 @@ def open_paper_trade(setup: dict) -> dict:
         "direction": setup["direction"],
         "entry_price": entry,
         "stop_loss": sl,
-        "take_profit": setup["take_profit"],
-        "position_size": round(size, 2),
+        "take_profit": tp,
+        "position_size": size,
         "risk_pct": config.MAX_RISK_PER_TRADE,
         "risk_usd": round(risk_usd, 2),
-        "potential_usd": round(size * abs(setup["take_profit"] - entry), 2),
+        "potential_usd": round(size * abs(tp - entry), 2),
         "status": "open",
         "exit_price": "",
         "exit_timestamp": "",
@@ -46,6 +61,7 @@ def open_paper_trade(setup: dict) -> dict:
         "pnl_usd": "",
         "fees_usd": "",
         "net_pnl_usd": "",
+        "alpaca_order_id": alpaca_order_id,
         "notes": setup.get("reason", ""),
     }
 
@@ -59,6 +75,11 @@ def close_paper_trade(trade_id: str, exit_price: float, outcome: str) -> dict | 
     updated = None
     for t in trades:
         if t["trade_id"] == trade_id and t["status"] == "open":
+            # Close on Alpaca (no-op if already closed by TP/SL bracket)
+            try:
+                close_position(t["symbol"])
+            except Exception:
+                pass
             entry = float(t["entry_price"])
             size = float(t["position_size"])
             direction = t["direction"]

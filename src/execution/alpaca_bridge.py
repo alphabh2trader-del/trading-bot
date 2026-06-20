@@ -1,8 +1,11 @@
 import os
 from dotenv import load_dotenv
 from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest
-from alpaca.trading.enums import OrderSide, TimeInForce
+from alpaca.trading.requests import (
+    MarketOrderRequest, LimitOrderRequest,
+    TakeProfitRequest, StopLossRequest,
+)
+from alpaca.trading.enums import OrderSide, TimeInForce, OrderClass
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
@@ -81,6 +84,27 @@ def submit_market_order(
         qty=round(qty, 2),
         side=order_side,
         time_in_force=TimeInForce.DAY,
+    )
+    order = _get_trading_client().submit_order(request)
+    return {"order_id": str(order.id), "status": str(order.status)}
+
+
+def submit_bracket_order(
+    symbol: str,
+    qty: float,
+    side: str,
+    take_profit_price: float,
+    stop_loss_price: float,
+) -> dict:
+    order_side = OrderSide.BUY if side == "long" else OrderSide.SELL
+    request = MarketOrderRequest(
+        symbol=symbol,
+        qty=round(qty, 2),
+        side=order_side,
+        time_in_force=TimeInForce.DAY,
+        order_class=OrderClass.BRACKET,
+        take_profit=TakeProfitRequest(limit_price=round(take_profit_price, 2)),
+        stop_loss=StopLossRequest(stop_price=round(stop_loss_price, 2)),
     )
     order = _get_trading_client().submit_order(request)
     return {"order_id": str(order.id), "status": str(order.status)}
