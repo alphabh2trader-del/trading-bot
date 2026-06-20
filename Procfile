@@ -1,1 +1,0 @@
-worker: python bot/telegram_bot.py
