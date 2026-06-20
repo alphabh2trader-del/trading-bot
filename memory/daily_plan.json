@@ -1,0 +1,16 @@
+{
+  "date": null,
+  "kill_switch": false,
+  "daily_drawdown": 0.0,
+  "regime": "NORMAL",
+  "news_blocked": false,
+  "setups": [],
+  "trades_today": 0,
+  "wins_today": 0,
+  "losses_today": 0,
+  "exposure_pct": 0.0,
+  "open_sectors": [],
+  "perplexity_calls_today": 0,
+  "skipped_tickers": [],
+  "watchlist": []
+}

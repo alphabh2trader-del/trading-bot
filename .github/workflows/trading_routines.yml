@@ -1,0 +1,322 @@
+# Trading Bot — Scheduled Routines
+#
+# Times are in UTC. Current offset: EDT = UTC-4 (summer), EST = UTC-5 (winter).
+# In winter, each routine fires 1 hour later than intended — adjust cron values
+# by subtracting 1 from the hour column during November–March if precision matters.
+#
+# Each job: checkout → setup Python → install deps → run routine → commit memory/ back to repo.
+# Committing memory/ ensures the bot's state (trades, config, snapshots) persists across runs.
+
+name: Trading Routines
+
+on:
+  schedule:
+    # premarket   07:00 ET → 11:00 UTC
+    - cron: "0 11 * * 1-5"
+    # analysis    08:00 ET → 12:00 UTC
+    - cron: "0 12 * * 1-5"
+    # plan        09:00 ET → 13:00 UTC
+    - cron: "0 13 * * 1-5"
+    # open        09:35 ET → 13:35 UTC
+    - cron: "35 13 * * 1-5"
+    # midday      10:30 ET → 14:30 UTC
+    - cron: "30 14 * * 1-5"
+    # afternoon   14:00 ET → 18:00 UTC
+    - cron: "0 18 * * 1-5"
+    # review      16:00 ET → 20:00 UTC  (learning + adaptive adjustment runs here)
+    - cron: "0 20 * * 1-5"
+    # weekly      Saturday 10:00 ET → 14:00 UTC
+    - cron: "0 14 * * 6"
+  workflow_dispatch:
+    inputs:
+      routine:
+        description: "Routine to run manually"
+        required: true
+        type: choice
+        options:
+          - premarket
+          - analysis
+          - plan
+          - open
+          - midday
+          - afternoon
+          - review
+          - weekly
+          - reset
+
+jobs:
+  # ---------- premarket ----------
+  premarket:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.routine == 'premarket' || github.event_name == 'schedule' && startsWith(github.event.schedule, '0 11')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run premarket
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TRADING_MODE: ${{ secrets.TRADING_MODE }}
+        run: python runner.py --routine premarket
+      - name: Save memory to repo
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@trading"
+          git add memory/
+          git diff --cached --quiet || git commit -m "chore: premarket memory update $(date -u +%Y-%m-%dT%H:%M)"
+          git push
+
+  # ---------- analysis ----------
+  analysis:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.routine == 'analysis' || github.event_name == 'schedule' && startsWith(github.event.schedule, '0 12')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run analysis
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TRADING_MODE: ${{ secrets.TRADING_MODE }}
+        run: python runner.py --routine analysis
+      - name: Save memory to repo
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@trading"
+          git add memory/
+          git diff --cached --quiet || git commit -m "chore: analysis memory update $(date -u +%Y-%m-%dT%H:%M)"
+          git push
+
+  # ---------- plan ----------
+  plan:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.routine == 'plan' || github.event_name == 'schedule' && startsWith(github.event.schedule, '0 13')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run plan
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TRADING_MODE: ${{ secrets.TRADING_MODE }}
+        run: python runner.py --routine plan
+      - name: Save memory to repo
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@trading"
+          git add memory/
+          git diff --cached --quiet || git commit -m "chore: plan memory update $(date -u +%Y-%m-%dT%H:%M)"
+          git push
+
+  # ---------- open ----------
+  open:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.routine == 'open' || github.event_name == 'schedule' && startsWith(github.event.schedule, '35 13')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run open
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TRADING_MODE: ${{ secrets.TRADING_MODE }}
+        run: python runner.py --routine open
+      - name: Save memory to repo
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@trading"
+          git add memory/
+          git diff --cached --quiet || git commit -m "chore: open memory update $(date -u +%Y-%m-%dT%H:%M)"
+          git push
+
+  # ---------- midday ----------
+  midday:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.routine == 'midday' || github.event_name == 'schedule' && startsWith(github.event.schedule, '30 14')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run midday
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TRADING_MODE: ${{ secrets.TRADING_MODE }}
+        run: python runner.py --routine midday
+      - name: Save memory to repo
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@trading"
+          git add memory/
+          git diff --cached --quiet || git commit -m "chore: midday memory update $(date -u +%Y-%m-%dT%H:%M)"
+          git push
+
+  # ---------- afternoon ----------
+  afternoon:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.routine == 'afternoon' || github.event_name == 'schedule' && startsWith(github.event.schedule, '0 18')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run afternoon
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TRADING_MODE: ${{ secrets.TRADING_MODE }}
+        run: python runner.py --routine afternoon
+      - name: Save memory to repo
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@trading"
+          git add memory/
+          git diff --cached --quiet || git commit -m "chore: afternoon memory update $(date -u +%Y-%m-%dT%H:%M)"
+          git push
+
+  # ---------- review (EOD — learning + adaptive adjustment) ----------
+  review:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.routine == 'review' || github.event_name == 'schedule' && startsWith(github.event.schedule, '0 20')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run review
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TRADING_MODE: ${{ secrets.TRADING_MODE }}
+        run: python runner.py --routine review
+      - name: Save memory to repo
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@trading"
+          git add memory/
+          git diff --cached --quiet || git commit -m "chore: review + adaptive update $(date -u +%Y-%m-%dT%H:%M)"
+          git push
+
+  # ---------- weekly (deep adaptive analysis) ----------
+  weekly:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.routine == 'weekly' || github.event_name == 'schedule' && startsWith(github.event.schedule, '0 14 * * 6')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run weekly
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TRADING_MODE: ${{ secrets.TRADING_MODE }}
+        run: python runner.py --routine weekly
+      - name: Save memory to repo
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@trading"
+          git add memory/
+          git diff --cached --quiet || git commit -m "chore: weekly deep-adaptive update $(date -u +%Y-%m-%dT%H:%M)"
+          git push
+
+  # ---------- manual reset ----------
+  reset:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.routine == 'reset'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Reset kill switch
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
+          TRADING_MODE: ${{ secrets.TRADING_MODE }}
+        run: python runner.py --routine reset
+      - name: Save memory to repo
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@trading"
+          git add memory/
+          git diff --cached --quiet || git commit -m "chore: kill switch reset $(date -u +%Y-%m-%dT%H:%M)"
+          git push

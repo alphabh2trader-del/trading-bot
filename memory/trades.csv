@@ -1,0 +1,1 @@
+trade_id,timestamp,symbol,direction,entry_price,stop_loss,take_profit,position_size,risk_pct,status,exit_price,exit_timestamp,pnl_pct,pnl_usd,notes
