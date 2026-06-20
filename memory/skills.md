@@ -54,7 +54,17 @@ All active skills are listed here. Never overwrite. Never remove without explici
 
 ---
 
-## 6. Volume Analysis
+## 6. ATR Stop Loss
+
+- File: `src/skills/atr_stops.py`
+- Status: ACTIVE
+- Added: 2026-06-19
+- Description: Replaces fixed 0.1% stop loss buffer with a volatility-adjusted ATR stop (1.5x ATR from entry). Also provides dynamic position sizing based on real risk per share.
+- Functions: `atr()`, `calculate_atr_stop()`, `calculate_position_size()`
+
+---
+
+## 7. Volume Analysis
 
 - File: `src/skills/volume_analysis.py`
 - Status: ACTIVE

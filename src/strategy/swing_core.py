@@ -111,8 +111,9 @@ def check_entry_conditions(
             or has_rejection_wick(last, "long")
         )
         if near_ema50 and rsi_ok and rsi_rising and candle_ok:
+            from src.skills.atr_stops import calculate_atr_stop
             entry = last["close"]
-            sl = last["low"] * 0.999
+            sl, atr_val = calculate_atr_stop(h4_df, "long")
             risk = entry - sl
             tp = entry + risk * target_rr
             return Signal(
@@ -122,7 +123,7 @@ def check_entry_conditions(
                 stop_loss=sl,
                 take_profit=tp,
                 rr_ratio=target_rr,
-                reason=f"Bullish pullback to EMA50. RSI={last_rsi:.1f}",
+                reason=f"Bullish pullback to EMA50. RSI={last_rsi:.1f} | ATR={atr_val:.2f}",
             )
 
     elif trend == "bearish":
@@ -133,8 +134,9 @@ def check_entry_conditions(
             or has_rejection_wick(last, "short")
         )
         if near_ema50 and rsi_ok and rsi_falling and candle_ok:
+            from src.skills.atr_stops import calculate_atr_stop
             entry = last["close"]
-            sl = last["high"] * 1.001
+            sl, atr_val = calculate_atr_stop(h4_df, "short")
             risk = sl - entry
             tp = entry - risk * target_rr
             return Signal(
@@ -144,7 +146,7 @@ def check_entry_conditions(
                 stop_loss=sl,
                 take_profit=tp,
                 rr_ratio=target_rr,
-                reason=f"Bearish pullback to EMA50. RSI={last_rsi:.1f}",
+                reason=f"Bearish pullback to EMA50. RSI={last_rsi:.1f} | ATR={atr_val:.2f}",
             )
 
     return None
