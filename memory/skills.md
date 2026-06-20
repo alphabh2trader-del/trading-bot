@@ -44,7 +44,17 @@ All active skills are listed here. Never overwrite. Never remove without explici
 
 ---
 
-## 5. Volume Analysis
+## 5. Earnings Filter
+
+- File: `src/skills/earnings_filter.py`
+- Status: ACTIVE
+- Added: 2026-06-19
+- Description: Blocks trade entries when a symbol has earnings within 3 days. Uses yfinance (no API key needed). Fails open — if data is unavailable the trade is not blocked.
+- Functions: `get_next_earnings_date()`, `is_earnings_within()`
+
+---
+
+## 6. Volume Analysis
 
 - File: `src/skills/volume_analysis.py`
 - Status: ACTIVE

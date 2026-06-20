@@ -22,6 +22,18 @@ def analyze(
     symbol: str,
     target_rr: float = 2.0,
 ) -> dict:
+    from src.skills.earnings_filter import is_earnings_within
+    earnings_blocked, earnings_reason = is_earnings_within(symbol)
+    if earnings_blocked:
+        return {
+            "symbol": symbol,
+            "trend": None,
+            "h4_rsi": None,
+            "signal": None,
+            "blocked": True,
+            "blocked_reason": earnings_reason,
+        }
+
     trend = check_trend(daily_df)
     signal = check_entry_conditions(h4_df, trend, target_rr)
 
