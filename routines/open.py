@@ -8,6 +8,7 @@ from execution.engine import open_paper_trade
 from execution.portfolio import check_tp_sl_hits
 from risk.risk_engine import can_open_trade, sector_allowed, update_drawdown
 from reporting.telegram import send_message, send_trade_alert, send_exit_alert
+from src.execution.alpaca_bridge import is_market_open
 from state.daily_state import save_state
 
 
@@ -19,6 +20,10 @@ def _is_midday() -> bool:
 
 
 def run(state: dict) -> None:
+    if not is_market_open():
+        send_message("OPEN: Market closed (holiday or early shutdown). Skipping entries.")
+        return
+
     # Wait 5 min after open
     time.sleep(config.OPEN_WAIT_MINUTES * 60)
 

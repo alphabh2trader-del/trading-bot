@@ -68,6 +68,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TRADING_MODE: ${{ secrets.TRADING_MODE }}
         run: python runner.py --routine premarket
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "
+          import os, urllib.request, json
+          token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+          chat = os.environ.get('TELEGRAM_CHAT_ID', '')
+          if not token or not chat:
+              exit(0)
+          data = json.dumps({'chat_id': chat, 'text': 'ERROR: premarket routine failed on GitHub Actions'}).encode()
+          req = urllib.request.Request('https://api.telegram.org/bot' + token + '/sendMessage', data=data, headers={'Content-Type': 'application/json'})
+          try: urllib.request.urlopen(req, timeout=10)
+          except: pass
+          "
       - name: Save memory to repo
         run: |
           git config user.name "trading-bot"
@@ -99,6 +116,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TRADING_MODE: ${{ secrets.TRADING_MODE }}
         run: python runner.py --routine analysis
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "
+          import os, urllib.request, json
+          token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+          chat = os.environ.get('TELEGRAM_CHAT_ID', '')
+          if not token or not chat:
+              exit(0)
+          data = json.dumps({'chat_id': chat, 'text': 'ERROR: analysis routine failed on GitHub Actions'}).encode()
+          req = urllib.request.Request('https://api.telegram.org/bot' + token + '/sendMessage', data=data, headers={'Content-Type': 'application/json'})
+          try: urllib.request.urlopen(req, timeout=10)
+          except: pass
+          "
       - name: Save memory to repo
         run: |
           git config user.name "trading-bot"
@@ -130,6 +164,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TRADING_MODE: ${{ secrets.TRADING_MODE }}
         run: python runner.py --routine plan
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "
+          import os, urllib.request, json
+          token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+          chat = os.environ.get('TELEGRAM_CHAT_ID', '')
+          if not token or not chat:
+              exit(0)
+          data = json.dumps({'chat_id': chat, 'text': 'ERROR: plan routine failed on GitHub Actions'}).encode()
+          req = urllib.request.Request('https://api.telegram.org/bot' + token + '/sendMessage', data=data, headers={'Content-Type': 'application/json'})
+          try: urllib.request.urlopen(req, timeout=10)
+          except: pass
+          "
       - name: Save memory to repo
         run: |
           git config user.name "trading-bot"
@@ -161,6 +212,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TRADING_MODE: ${{ secrets.TRADING_MODE }}
         run: python runner.py --routine open
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "
+          import os, urllib.request, json
+          token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+          chat = os.environ.get('TELEGRAM_CHAT_ID', '')
+          if not token or not chat:
+              exit(0)
+          data = json.dumps({'chat_id': chat, 'text': 'ERROR: open routine failed on GitHub Actions'}).encode()
+          req = urllib.request.Request('https://api.telegram.org/bot' + token + '/sendMessage', data=data, headers={'Content-Type': 'application/json'})
+          try: urllib.request.urlopen(req, timeout=10)
+          except: pass
+          "
       - name: Save memory to repo
         run: |
           git config user.name "trading-bot"
@@ -192,6 +260,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TRADING_MODE: ${{ secrets.TRADING_MODE }}
         run: python runner.py --routine midday
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "
+          import os, urllib.request, json
+          token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+          chat = os.environ.get('TELEGRAM_CHAT_ID', '')
+          if not token or not chat:
+              exit(0)
+          data = json.dumps({'chat_id': chat, 'text': 'ERROR: midday routine failed on GitHub Actions'}).encode()
+          req = urllib.request.Request('https://api.telegram.org/bot' + token + '/sendMessage', data=data, headers={'Content-Type': 'application/json'})
+          try: urllib.request.urlopen(req, timeout=10)
+          except: pass
+          "
       - name: Save memory to repo
         run: |
           git config user.name "trading-bot"
@@ -223,6 +308,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TRADING_MODE: ${{ secrets.TRADING_MODE }}
         run: python runner.py --routine afternoon
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "
+          import os, urllib.request, json
+          token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+          chat = os.environ.get('TELEGRAM_CHAT_ID', '')
+          if not token or not chat:
+              exit(0)
+          data = json.dumps({'chat_id': chat, 'text': 'ERROR: afternoon routine failed on GitHub Actions'}).encode()
+          req = urllib.request.Request('https://api.telegram.org/bot' + token + '/sendMessage', data=data, headers={'Content-Type': 'application/json'})
+          try: urllib.request.urlopen(req, timeout=10)
+          except: pass
+          "
       - name: Save memory to repo
         run: |
           git config user.name "trading-bot"
@@ -254,6 +356,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TRADING_MODE: ${{ secrets.TRADING_MODE }}
         run: python runner.py --routine review
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "
+          import os, urllib.request, json
+          token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+          chat = os.environ.get('TELEGRAM_CHAT_ID', '')
+          if not token or not chat:
+              exit(0)
+          data = json.dumps({'chat_id': chat, 'text': 'ERROR: review routine failed on GitHub Actions'}).encode()
+          req = urllib.request.Request('https://api.telegram.org/bot' + token + '/sendMessage', data=data, headers={'Content-Type': 'application/json'})
+          try: urllib.request.urlopen(req, timeout=10)
+          except: pass
+          "
       - name: Save memory to repo
         run: |
           git config user.name "trading-bot"
@@ -285,6 +404,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TRADING_MODE: ${{ secrets.TRADING_MODE }}
         run: python runner.py --routine weekly
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "
+          import os, urllib.request, json
+          token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+          chat = os.environ.get('TELEGRAM_CHAT_ID', '')
+          if not token or not chat:
+              exit(0)
+          data = json.dumps({'chat_id': chat, 'text': 'ERROR: weekly routine failed on GitHub Actions'}).encode()
+          req = urllib.request.Request('https://api.telegram.org/bot' + token + '/sendMessage', data=data, headers={'Content-Type': 'application/json'})
+          try: urllib.request.urlopen(req, timeout=10)
+          except: pass
+          "
       - name: Save memory to repo
         run: |
           git config user.name "trading-bot"
@@ -313,6 +449,23 @@ jobs:
           ALPACA_BASE_URL: ${{ secrets.ALPACA_BASE_URL }}
           TRADING_MODE: ${{ secrets.TRADING_MODE }}
         run: python runner.py --routine reset
+      - name: Alert on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "
+          import os, urllib.request, json
+          token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+          chat = os.environ.get('TELEGRAM_CHAT_ID', '')
+          if not token or not chat:
+              exit(0)
+          data = json.dumps({'chat_id': chat, 'text': 'ERROR: reset routine failed on GitHub Actions'}).encode()
+          req = urllib.request.Request('https://api.telegram.org/bot' + token + '/sendMessage', data=data, headers={'Content-Type': 'application/json'})
+          try: urllib.request.urlopen(req, timeout=10)
+          except: pass
+          "
       - name: Save memory to repo
         run: |
           git config user.name "trading-bot"

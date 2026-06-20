@@ -127,3 +127,8 @@ def get_positions() -> list[dict]:
 def close_position(symbol: str) -> dict:
     result = _get_trading_client().close_position(symbol)
     return {"order_id": str(result.id), "status": str(result.status)}
+
+
+def is_market_open() -> bool:
+    clock = _get_trading_client().get_clock()
+    return clock.is_open

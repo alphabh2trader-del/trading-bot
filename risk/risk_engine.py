@@ -18,11 +18,17 @@ def check_risk(state: dict) -> None:
 
 
 def can_open_trade(state: dict) -> tuple[bool, str]:
+    if state.get("daily_drawdown", 0.0) >= config.MAX_DRAWDOWN_PCT:
+        return False, f"Daily loss limit hit: -{state['daily_drawdown']:.1f}%"
+
+    from execution.portfolio import get_open_trades
+    if len(get_open_trades()) >= config.MAX_CONCURRENT_POSITIONS:
+        return False, f"Max concurrent positions ({config.MAX_CONCURRENT_POSITIONS}) reached"
+
     exposure = state.get("exposure_pct", 0.0)
     if exposure >= config.MAX_TOTAL_EXPOSURE:
         return False, f"Max exposure reached: {exposure:.1f}%"
 
-    open_sectors = state.get("open_sectors", [])
     return True, "OK"
 
 

@@ -2,9 +2,13 @@
 from execution.portfolio import check_tp_sl_hits
 from reporting.telegram import send_message, send_exit_alert
 from risk.risk_engine import update_drawdown
+from src.execution.alpaca_bridge import is_market_open
 
 
 def run(state: dict) -> None:
+    if not is_market_open():
+        return  # silent — nothing to check if market is closed
+
     closed = check_tp_sl_hits(timeframe="4Hour")
     for t in closed:
         send_exit_alert(t)

@@ -13,6 +13,7 @@ REGIME_BONUS = {"TREND": 10, "NORMAL": 0, "CHOP": -10, "EXTREME": 0}
 MAX_DRAWDOWN_PCT = 2.0
 MAX_RISK_PER_TRADE = 1.0    # % of equity
 MAX_TOTAL_EXPOSURE = 3.0    # % of equity
+MAX_CONCURRENT_POSITIONS = 2
 SECTOR_MAX = 1              # max 1 open position per sector
 
 # --- Execution ---
