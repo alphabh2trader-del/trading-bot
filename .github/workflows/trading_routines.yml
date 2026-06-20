@@ -44,6 +44,9 @@ on:
           - weekly
           - reset
 
+permissions:
+  contents: write
+
 jobs:
   # ---------- premarket ----------
   premarket:
