@@ -46,6 +46,19 @@ EMA 200 on D1:
 
 ## Validation Status
 
-- Backtested: NO
+- Backtested: YES — 2026-06-21 (see memory/backtests/)
 - Paper traded: NO (starting now)
-- Live traded: NO
+- Live traded: NO — **DO NOT** deploy live; current edge is negative.
+
+### Backtest result — 2026-06-21 (10-symbol watchlist, ~540d H4, threshold 65)
+
+- Trades: 56 | Win rate: **30.4%** | Profit factor: **0.87** | Expectancy: **-0.089 R/trade**
+- Target was 55–60% win rate. With +2R/-1R the breakeven win rate is 33.3%, so the
+  strategy is currently **below breakeven** — it would lose money net of slippage/fees.
+- Conclusion: **swing_core_v1 is NOT validated.** The setup edge needs improvement
+  (entry filters, level/zone quality, RR, regime gating) before paper results can be
+  trusted or live trading considered. Re-run `python -m backtest.run` after each change.
+
+Note: a backtest also exposed that the old `detect_structure` (strictly monotonic
+highs/lows) fired ~1 in 540 bars, so the strategy produced essentially no setups; it
+was replaced with a half-window higher-high/higher-low structure check (2026-06-21).

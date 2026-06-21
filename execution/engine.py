@@ -7,26 +7,19 @@ import config
 from data.market_data import get_live_quote
 from src.execution.alpaca_bridge import get_account, submit_bracket_order, close_position
 from memory.logger import log_execution_entry
+from memory.trade_schema import TRADE_FIELDNAMES as FIELDNAMES
 
 TRADES_FILE = Path(__file__).parent.parent / "memory" / "trades.csv"
 
-FIELDNAMES = [
-    "trade_id", "timestamp", "symbol", "direction",
-    "entry_price", "stop_loss", "take_profit",
-    "position_size", "risk_pct", "risk_usd", "potential_usd",
-    "status", "exit_price", "exit_timestamp", "pnl_pct", "pnl_usd",
-    "fees_usd", "net_pnl_usd", "alpaca_order_id", "notes",
-]
 
-
-def open_paper_trade(setup: dict) -> dict:
+def open_paper_trade(setup: dict, risk_multiplier: float = 1.0) -> dict:
     account = get_account()
     equity = account["equity"]
     entry = setup["entry_price"]
     sl = setup["stop_loss"]
     tp = setup["take_profit"]
     risk_per_share = abs(entry - sl)
-    risk_usd = equity * (config.MAX_RISK_PER_TRADE / 100)
+    risk_usd = equity * (config.MAX_RISK_PER_TRADE / 100) * risk_multiplier
     size = round(risk_usd / risk_per_share, 2) if risk_per_share > 0 else 0
 
     # Submit bracket order to Alpaca — TP and SL are handled automatically

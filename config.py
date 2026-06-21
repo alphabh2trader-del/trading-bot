@@ -1,7 +1,23 @@
+import json
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
 MEMORY_DIR = BASE_DIR / "memory"
+
+
+def _load_config_json() -> dict:
+    """memory/config.json is the single source of truth for risk parameters."""
+    cfg_path = MEMORY_DIR / "config.json"
+    if not cfg_path.exists():
+        return {}
+    try:
+        return json.loads(cfg_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+_CFG = _load_config_json()
+_RISK = _CFG.get("risk", {})
 
 # --- Scoring ---
 SCORE_THRESHOLD = 65
@@ -9,11 +25,12 @@ MIDDAY_SCORE_THRESHOLD = 75  # applied after 10:30 ET
 
 REGIME_BONUS = {"TREND": 10, "NORMAL": 0, "CHOP": -10, "EXTREME": 0}
 
-# --- Risk ---
-MAX_DRAWDOWN_PCT = 2.0
-MAX_RISK_PER_TRADE = 1.0    # % of equity
+# --- Risk (sourced from memory/config.json — single source of truth) ---
+MAX_RISK_PER_TRADE = float(_RISK.get("risk_per_trade_pct", 1.0))       # % of equity per trade
+MAX_CONCURRENT_POSITIONS = int(_RISK.get("max_open_trades", 2))
+MAX_DRAWDOWN_PCT = float(_RISK.get("max_daily_loss_pct", 3.0))         # daily kill-switch (was 2.0; aligned to spec/config.json)
+MAX_TOTAL_DRAWDOWN_PCT = float(_RISK.get("max_total_drawdown_pct", 8.0))  # account-level kill-switch
 MAX_TOTAL_EXPOSURE = 3.0    # % of equity
-MAX_CONCURRENT_POSITIONS = 2
 SECTOR_MAX = 1              # max 1 open position per sector
 
 # --- Execution ---
@@ -25,6 +42,11 @@ OPEN_WAIT_MINUTES = 5       # no trades in first 5 min after open
 
 # --- R:R ---
 MIN_RR = 1.8                # hard floor — below this rr_score = 0
+
+# --- Skills (integrated into scorer/planner) ---
+ATR_STOP_MULT = 1.5         # ATR multiplier for the volatility buffer on stops
+EARNINGS_BUFFER_DAYS = 3    # block setups with earnings within N days
+VOLUME_CONFIRM_BONUS = 5    # score bonus when volume confirms the signal
 
 # --- Watchlist ---
 BASE_WATCHLIST = [

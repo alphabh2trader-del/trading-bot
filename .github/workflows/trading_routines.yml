@@ -1,8 +1,22 @@
 # Trading Bot — Scheduled Routines
 #
-# Times are in UTC. Current offset: EDT = UTC-4 (summer), EST = UTC-5 (winter).
-# In winter, each routine fires 1 hour later than intended — adjust cron values
-# by subtracting 1 from the hour column during November–March if precision matters.
+# Times are in UTC. GitHub Actions cron is UTC-only (no timezone/DST support).
+# ET offset: EDT = UTC-4 (summer), EST = UTC-5 (winter).
+#
+# ⚠ DST CAVEAT (action required twice a year):
+# These crons are set for EDT (summer). In winter (EST, ~Nov–Mar) every routine
+# fires 1 hour EARLIER in ET than intended. This matters most for `open`
+# (13:35 UTC = 08:35 ET in winter): the market is not open yet, `is_market_open()`
+# returns False, and NO entries are taken all winter. The `_is_midday()` threshold
+# switch is DST-safe (uses pytz), but the SCHEDULE is not.
+#
+# Fix options:
+#   (a) In winter, add 1h to the hour of each market-hours cron below AND its
+#       matching `startsWith(github.event.schedule, ...)` condition; revert in spring, OR
+#   (b) Move the market-hours routines (analysis/plan/open/midday/afternoon/review)
+#       into the EST/EDT overlap window 14:30–20:00 UTC so they always land inside
+#       market hours year-round (entry time then shifts ~1h seasonally, acceptable
+#       for a swing strategy). premarket (07:00 ET) is pre-open and fine in both.
 #
 # Each job: checkout → setup Python → install deps → run routine → commit memory/ back to repo.
 # Committing memory/ ensures the bot's state (trades, config, snapshots) persists across runs.

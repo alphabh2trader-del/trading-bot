@@ -1,1 +1,1 @@
-trade_id,timestamp,symbol,direction,entry_price,stop_loss,take_profit,position_size,risk_pct,status,exit_price,exit_timestamp,pnl_pct,pnl_usd,notes
+trade_id,timestamp,symbol,direction,entry_price,stop_loss,take_profit,position_size,risk_pct,risk_usd,potential_usd,status,exit_price,exit_timestamp,pnl_pct,pnl_usd,fees_usd,net_pnl_usd,alpaca_order_id,notes

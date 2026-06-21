@@ -8,6 +8,8 @@ from strategy.indicators import (
     detect_structure, macd_bullish_cross, macd_bearish_cross, atr_expanding,
 )
 from strategy.levels import find_nearest_level
+from src.skills.atr_stops import calculate_atr_stop
+from src.skills.volume_analysis import get_volume_signal
 
 
 @dataclass
@@ -68,12 +70,16 @@ def calculate_score(
         return None
 
     # --- Entry / SL / TP ---
+    # Stop is structure-based (recent swing low/high) but uses an ATR volatility
+    # buffer (via the ATR-stop skill) instead of a flat 0.1%. We keep whichever
+    # level leaves the most room from entry, so normal noise doesn't stop us out.
     entry = last_h4["close"]
+    atr_stop, _ = calculate_atr_stop(h4, direction, atr_multiplier=config.ATR_STOP_MULT)
     if direction == "long":
-        sl = last_h4["low"] * 0.999
+        sl = min(last_h4["low"] * 0.999, atr_stop)
         tp = entry + (entry - sl) * 2.0
     else:
-        sl = last_h4["high"] * 1.001
+        sl = max(last_h4["high"] * 1.001, atr_stop)
         tp = entry - (sl - entry) * 2.0
 
     risk = abs(entry - sl)
@@ -112,6 +118,10 @@ def calculate_score(
     elif rv >= 1.5:
         liquidity_score = 8
 
+    # Volume confirmation (0–5) — via volume-analysis skill
+    vol_signal = get_volume_signal(h4)
+    volume_score = config.VOLUME_CONFIRM_BONUS if vol_signal["confirmed"] else 0
+
     # R:R (0–15)
     if rr < config.MIN_RR:
         return None  # hard floor
@@ -125,7 +135,7 @@ def calculate_score(
     # Regime bonus
     regime_bonus = config.REGIME_BONUS.get(regime, 0)
 
-    total = trend_score + momentum_score + structure_score + liquidity_score + rr_score + regime_bonus
+    total = trend_score + momentum_score + structure_score + liquidity_score + volume_score + rr_score + regime_bonus
     total = max(0, min(100, total))
 
     sector = config.SECTOR_MAP.get(symbol, "unknown")
@@ -141,5 +151,5 @@ def calculate_score(
         sector=sector,
         regime=regime,
         rsi_value=round(last_rsi, 1),
-        reason=f"EMA200 {'above' if above_ema200 else 'below'} | RSI {last_rsi:.1f} | MACD {'cross' if momentum_score >= 20 else 'no cross'} | R:R {rr:.2f}",
+        reason=f"EMA200 {'above' if above_ema200 else 'below'} | RSI {last_rsi:.1f} | MACD {'cross' if momentum_score >= 20 else 'no cross'} | Vol {'OK' if volume_score else 'weak'}({vol_signal['ratio']}) | R:R {rr:.2f}",
     )

@@ -1,6 +1,8 @@
 """OPEN — 09:30 ET: execute valid setups after 5-min wait."""
 import time
-from datetime import datetime, timezone
+from datetime import datetime
+
+import pytz
 
 import config
 from decision.validator import validate_entry
@@ -13,15 +15,23 @@ from state.daily_state import save_state
 
 
 def _is_midday() -> bool:
-    now = datetime.now(timezone.utc)
-    et_hour = (now.hour - 5) % 24  # rough ET offset (ignores DST)
-    et_minute = now.minute
-    return et_hour > 10 or (et_hour == 10 and et_minute >= 30)
+    # Proper US/Eastern conversion — handles EST/EDT automatically (no fixed offset).
+    now_et = datetime.now(pytz.timezone("US/Eastern"))
+    return now_et.hour > 10 or (now_et.hour == 10 and now_et.minute >= 30)
 
 
 def run(state: dict) -> None:
     if not is_market_open():
         send_message("OPEN: Market closed (holiday or early shutdown). Skipping entries.")
+        return
+
+    # Defensive block guard — even if plan.py did not run, never enter on a
+    # news-blocked day or when macro sentiment is strongly negative.
+    if state.get("news_blocked"):
+        send_message("OPEN: News block active — no entries today.")
+        return
+    if state.get("sentiment_block"):
+        send_message("OPEN: Sentiment block active — no entries today.")
         return
 
     # Wait 5 min after open
@@ -64,7 +74,10 @@ def run(state: dict) -> None:
         if not valid:
             continue
 
-        trade = open_paper_trade(setup)
+        # Reduce size on mildly negative macro sentiment (AI research can only
+        # block or reduce — never increase — per the system spec).
+        risk_multiplier = 0.5 if state.get("sentiment_reduce") else 1.0
+        trade = open_paper_trade(setup, risk_multiplier=risk_multiplier)
         send_trade_alert(setup, trade)
 
         state["trades_today"] = state.get("trades_today", 0) + 1

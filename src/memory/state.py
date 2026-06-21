@@ -30,13 +30,9 @@ def update_memory(key: str, value: str) -> None:
 
 
 def log_trade(trade: dict) -> None:
+    from memory.trade_schema import TRADE_FIELDNAMES as fieldnames
     trades_file = _path("trades.csv")
     file_exists = trades_file.exists() and trades_file.stat().st_size > 0
-    fieldnames = [
-        "trade_id", "timestamp", "symbol", "direction", "entry_price",
-        "stop_loss", "take_profit", "position_size", "risk_pct", "status",
-        "exit_price", "exit_timestamp", "pnl_pct", "pnl_usd", "notes"
-    ]
     with open(trades_file, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         if not file_exists:

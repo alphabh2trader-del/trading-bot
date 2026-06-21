@@ -46,15 +46,27 @@ def rvol(df: pd.DataFrame, lookback: int = 20) -> float:
 
 
 def detect_structure(df: pd.DataFrame, lookback: int = 10) -> str:
-    highs = df["high"].tail(lookback).values
-    lows = df["low"].tail(lookback).values
-    hh = all(highs[i] > highs[i - 1] for i in range(1, len(highs)))
-    hl = all(lows[i] > lows[i - 1] for i in range(1, len(lows)))
-    lh = all(highs[i] < highs[i - 1] for i in range(1, len(highs)))
-    ll = all(lows[i] < lows[i - 1] for i in range(1, len(lows)))
-    if hh and hl:
+    """Swing market structure over the last `lookback` bars.
+
+    Compares the recent half of the window against the older half:
+    higher-highs AND higher-lows -> bullish; lower-highs AND lower-lows ->
+    bearish. This captures trend structure without demanding that every
+    consecutive bar increase (which essentially never happens on real data
+    and starved the strategy of setups).
+    """
+    window = df.tail(lookback)
+    if len(window) < lookback:
+        return "neutral"
+
+    half = lookback // 2
+    older_high = window["high"].iloc[:half].max()
+    recent_high = window["high"].iloc[half:].max()
+    older_low = window["low"].iloc[:half].min()
+    recent_low = window["low"].iloc[half:].min()
+
+    if recent_high > older_high and recent_low > older_low:
         return "bullish"
-    if lh and ll:
+    if recent_high < older_high and recent_low < older_low:
         return "bearish"
     return "neutral"
 

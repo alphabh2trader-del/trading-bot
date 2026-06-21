@@ -2,6 +2,7 @@ import config
 from data.market_data import fetch_bars_safe, data_age_minutes
 from strategy.scorer import calculate_score, Setup
 from memory.logger import log_opportunity
+from src.skills.earnings_filter import is_earnings_within
 
 
 def build_plan(watchlist: list[str], regime: str) -> list[Setup]:
@@ -31,6 +32,12 @@ def build_plan(watchlist: list[str], regime: str) -> list[Setup]:
 
         if setup.score < threshold:
             log_opportunity(symbol, score=setup.score, reason=f"Score {setup.score} below threshold {threshold}")
+            continue
+
+        # Earnings filter — skip setups with earnings within the buffer window
+        blocked, ereason = is_earnings_within(symbol, days_buffer=config.EARNINGS_BUFFER_DAYS)
+        if blocked:
+            log_opportunity(symbol, score=setup.score, reason=f"Earnings block: {ereason}")
             continue
 
         candidates.append(setup)

@@ -8,6 +8,11 @@ def run(state: dict) -> None:
         state["setups"] = []
         return
 
+    if state.get("sentiment_block"):
+        send_message("PLAN: Sentiment block active. No trades today.")
+        state["setups"] = []
+        return
+
     setups = state.get("setups", [])
     if not setups:
         send_message("PLAN: No setups available from analysis.")

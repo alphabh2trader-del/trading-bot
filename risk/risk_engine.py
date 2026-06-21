@@ -16,6 +16,25 @@ def check_risk(state: dict) -> None:
         send_message(f"KILL SWITCH: daily drawdown {drawdown:.2f}% >= {config.MAX_DRAWDOWN_PCT}%. System LOCKED.")
         sys.exit(0)
 
+    # Account-level (total) drawdown guard — tracks peak equity across all runs.
+    # Skipped silently if equity is unavailable (e.g. local dry-run without creds).
+    try:
+        from src.execution.alpaca_bridge import get_account
+        from state.risk_state import update_total_drawdown
+        equity = float(get_account().get("equity", 0.0))
+        total_dd = update_total_drawdown(equity)
+        if total_dd >= config.MAX_TOTAL_DRAWDOWN_PCT:
+            state["kill_switch"] = "LOCKED"
+            save_state(state)
+            send_message(
+                f"KILL SWITCH: total drawdown {total_dd:.2f}% >= {config.MAX_TOTAL_DRAWDOWN_PCT}%. System LOCKED."
+            )
+            sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception:
+        pass
+
 
 def can_open_trade(state: dict) -> tuple[bool, str]:
     if state.get("daily_drawdown", 0.0) >= config.MAX_DRAWDOWN_PCT:

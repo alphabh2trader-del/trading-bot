@@ -73,3 +73,24 @@ All active skills are listed here. Never overwrite. Never remove without explici
 - Functions: `check_volume_confirmation()`, `detect_volume_spike()`, `check_breakout_volume()`, `get_volume_signal()`
 
 ---
+
+## Integration Status — production pipeline (runner.py) — updated 2026-06-20
+
+Previously several skills lived in `src/skills/` but were only reachable from the
+unused `main.py` entry point. They are now wired into the live `runner.py` → routines path:
+
+- **ATR Stop Loss** → `strategy/scorer.py`: `calculate_atr_stop()` sets a volatility
+  buffer on the structure-based stop (config `ATR_STOP_MULT`).
+- **Volume Analysis** → `strategy/scorer.py`: `get_volume_signal()` adds a confirmation
+  score component (config `VOLUME_CONFIRM_BONUS`) and appears in the setup `reason`.
+- **Earnings Filter** → `decision/planner.py`: `is_earnings_within()` rejects setups with
+  earnings inside `EARNINGS_BUFFER_DAYS`. (Still fails open — see Phase 7 review.)
+- **Sentiment Analysis** → `routines/premarket.py`: `sentiment_report()` sets
+  `state["sentiment_block"]` / `state["sentiment_reduce"]`; `plan.py`/`open.py` block on it
+  and `open.py` halves position size when sentiment is mildly negative.
+- **News Filtering** → `routines/premarket.py` sets `state["news_blocked"]`; enforced in
+  `plan.py` (clears setups) and defensively in `open.py`.
+- **Market Analysis / Telegram** → analysis is mirrored by `strategy/scorer.py`; Telegram
+  notifications run through `reporting/telegram.py` in every routine.
+
+---

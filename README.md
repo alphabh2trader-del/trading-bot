@@ -110,13 +110,15 @@ The workflows in `.github/workflows/` will run automatically on schedule. You ca
 ## Running Locally
 
 ```bash
-# Single scan cycle (paper mode)
-python main.py --once
-
-# Run a specific routine manually
+# Run a specific routine manually (this is the single entry point — runner.py)
 python runner.py --routine premarket
 python runner.py --routine analysis
+python runner.py --routine plan
 python runner.py --routine open
+python runner.py --routine midday
+python runner.py --routine afternoon
+python runner.py --routine review
+python runner.py --routine weekly
 ```
 
 ---
