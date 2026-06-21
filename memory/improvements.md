@@ -123,3 +123,29 @@ All improvements are appended here. Never delete entries.
   (vol targeting + multi-lookback are the top candidates, gated on the `verify.py` bar).
 
 ---
+
+## 2026-06-21 — Pivot to dual-strategy (dual_swing+trend_v1)
+
+User goal: more activity / "profit on the spot," not just the slow monthly trend strategy
+(~0.84%/mo). Decision: run TWO sleeves at once on one Alpaca account, disjoint universes.
+
+- **Swing sleeve (70% capital, daily):** reactivated the existing D1-trend / H4-pullback
+  pipeline (`strategy/scorer.py` + `decision/planner.py`) — it was fully built but switched
+  OFF (`routines/analysis.py` hard-set `state["setups"] = []`). Now `analysis.run` calls
+  `build_plan(SWING_WATCHLIST)` every day. Trades 16 liquid large-cap stocks.
+- **Trend sleeve (30% capital, monthly):** trend_timing_v1 kept and still running, scoped to
+  the ETF universe + 30% of equity via new `rebalance_portfolio(capital_frac, universe)` args
+  so it never touches swing stock positions. Disjoint watchlists = no collision.
+- **Risk model rewritten (user decisions):** (1) NO daily halt — per-trade size shrinks down
+  `DAILY_DERISK_LADDER` as the day's loss grows, never blocks a trade; (2) NO fixed
+  position-count cap — swing entries gated by an aggregate OPEN-RISK budget (6%) + a 20-pos
+  sanity ceiling; (3) the ONLY hard halt is the account catastrophe drawdown (25% paper /
+  8% funded). Removed `_top2_different_sectors` cap (take all good setups); SECTOR_MAX 1→2.
+- **Validation (net of fees):** new `backtest/swing.py` (account-level 1%/6% sim, 0.10%
+  round-trip): 167 trades, 46.1% win, PF 1.22, +0.27%/mo (~3.2%/yr), 10.4% maxDD on a daily
+  proxy. Edge survives fees but is THIN. Blended realistic expectation ~0.5-1.0%/mo — told
+  the user plainly that 5%/mo is not achievable under capital-preservation constraints.
+- Tests: updated test_risk.py for the new model, added rebalance-scoping test → 51 green.
+  README + memory/strategy.md rewritten for the dual system. config version 3.0 → 4.0.
+
+---

@@ -8,7 +8,7 @@ import config
 from decision.validator import validate_entry
 from execution.engine import open_paper_trade
 from execution.portfolio import check_tp_sl_hits
-from risk.risk_engine import can_open_trade, sector_allowed, update_drawdown
+from risk.risk_engine import can_open_trade, sector_allowed, update_drawdown, daily_risk_multiplier
 from reporting.telegram import send_message, send_trade_alert, send_exit_alert
 from src.execution.alpaca_bridge import is_market_open
 from state.daily_state import save_state
@@ -77,14 +77,18 @@ def run(state: dict) -> None:
         if not valid:
             continue
 
-        # Reduce size on mildly negative macro sentiment (AI research can only
-        # block or reduce — never increase — per the system spec).
-        risk_multiplier = 0.5 if state.get("sentiment_reduce") else 1.0
+        # Size multiplier combines two reducers (never increasers):
+        #  - the daily de-risk ladder (size shrinks as the day's loss grows — this
+        #    replaces the old daily kill-switch: a bad day reduces size, never halts),
+        #  - mildly negative macro sentiment (AI research can only block/reduce).
+        risk_multiplier = daily_risk_multiplier(state)
+        if state.get("sentiment_reduce"):
+            risk_multiplier *= 0.5
         trade = open_paper_trade(setup, risk_multiplier=risk_multiplier)
         send_trade_alert(setup, trade)
 
         state["trades_today"] = state.get("trades_today", 0) + 1
-        state["exposure_pct"] = state.get("exposure_pct", 0.0) + config.MAX_RISK_PER_TRADE
+        state["exposure_pct"] = state.get("exposure_pct", 0.0) + config.MAX_RISK_PER_TRADE * risk_multiplier
         state["open_sectors"] = state.get("open_sectors", []) + [setup["sector"]]
         setup["status"] = "EXECUTED"
         executed += 1

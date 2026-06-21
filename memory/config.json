@@ -1,21 +1,27 @@
 {
   "system": {
     "mode": "paper",
-    "version": "3.0",
-    "strategy": "trend_timing_v1",
+    "version": "4.0",
+    "strategy": "dual_swing+trend_v1",
     "initialized": "2026-06-19"
   },
   "risk": {
     "risk_per_trade_pct": 1.0,
     "max_open_trades": 6,
+    "max_open_risk_pct": 6.0,
+    "max_positions_ceiling": 20,
+    "daily_derisk_ladder": [[1.0, 1.0], [2.0, 0.66], [3.0, 0.5], [100.0, 0.33]],
     "max_daily_loss_pct": 3.0,
     "max_total_drawdown_pct": 25.0,
     "max_total_drawdown_pct_funded": 8.0,
     "target_rr_min": 1.5,
     "target_rr_max": 2.0,
-    "_comment_drawdown": "PAPER backstop = 25% (consistent with trend_timing_v1 @ 1.0x exposure, expected ~24% DD; user accepted this). For a FUNDED prop account, set max_total_drawdown_pct = max_total_drawdown_pct_funded (8.0) AND set trend.base_exposure = 0.33. The soft de-risk ladder in trend.* protects capital well before this catastrophe backstop trips."
+    "_comment_risk_model": "NO daily halt and NO hard position-count cap (user decision 2026-06-21). Instead: (1) per-trade risk SHRINKS as the day's realised loss grows, via daily_derisk_ladder [loss_pct_threshold, size_multiplier] — a bad day reduces size, never blocks a trade; (2) new swing entries are gated by an aggregate OPEN RISK budget (max_open_risk_pct=6%), not a fixed count, so good setups are taken until total risk is spent; (3) max_positions_ceiling=20 is only a sanity backstop against a runaway day. The ONLY thing that halts trading is the account-level catastrophe drawdown.",
+    "_comment_drawdown": "PAPER catastrophe halt = 25%. For a FUNDED prop account, set max_total_drawdown_pct = max_total_drawdown_pct_funded (8.0) AND set trend.base_exposure = 0.33. This account-level stop is the ONLY hard halt (protects a funded account from prop-firm termination); the daily de-risk ladder protects capital well before it trips."
   },
   "trend": {
+    "enabled": true,
+    "capital_allocation": 0.30,
     "exposure": 1.0,
     "base_exposure": 1.0,
     "min_exposure": 0.33,
@@ -24,7 +30,12 @@
     "deep_derisk_dd_pct": 18.0,
     "restore_dd_pct": 6.0,
     "derisk_ladder": [1.0, 0.66, 0.33],
-    "_comment": "Live-controllable trend-timing params. memory/adaptive.py lowers exposure one rung down the ladder for capital preservation when realised drawdown breaches soft/deep thresholds, and restores it after recovery. Every change is logged + sent to Telegram. sma_months robustness is re-validated monthly (flag-only, no auto-flip)."
+    "_comment": "TREND SLEEVE — 30% of capital (capital_allocation). Faber GTAA monthly ETF rebalance. exposure 1.0 = fully invest the 30% sleeve. memory/adaptive.py walks exposure down the ladder for capital preservation on drawdown and restores after recovery. Every change is logged + sent to Telegram. Disjoint universe from the swing sleeve (ETFs only) so the two strategies never trade the same symbol."
+  },
+  "swing": {
+    "enabled": true,
+    "capital_allocation": 0.70,
+    "_comment": "SWING SLEEVE — 70% of capital. Daily D1-trend / H4-pullback system (strategy/scorer.py). Risk-based sizing at risk_per_trade_pct of full equity per trade, gated by the open-risk budget. Trades a disjoint stock watchlist (config.SWING_WATCHLIST) so it never collides with the trend ETF sleeve."
   },
   "strategy": {
     "trend_ema": 200,

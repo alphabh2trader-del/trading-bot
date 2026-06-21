@@ -1,12 +1,23 @@
 # AI Swing Trading Bot
 
-An autonomous **trend-timing** trading system for prop-firm-style funded accounts.
+An autonomous **dual-strategy** trading system for prop-firm-style funded accounts. It runs
+two uncorrelated sleeves on one Alpaca account, on **disjoint universes**, at the same time:
+
+- **Swing sleeve (70% of capital, daily):** a D1-trend / H4-pullback system on 16 liquid
+  large-cap stocks — risk-based 1% per trade.
+- **Trend sleeve (30% of capital, monthly):** the cost-robust Faber GTAA ETF rotation
+  (`trend_timing_v1`) — the proven defensive core.
+
 It runs **fully on GitHub Actions** — no server, no VPS, no always-on machine. Every
 scheduled routine checks out the repo, runs, and commits its state back, so the bot's
 memory lives in git.
 
-> **Status:** paper trading. Live trading stays locked until the documented unlock
-> conditions are met (see [Live Trading Unlock](#live-trading-unlock-conditions)).
+> **Status:** paper trading (`dual_swing+trend_v1`). Live trading stays locked until the
+> documented unlock conditions are met (see [Live Trading Unlock](#live-trading-unlock-conditions)).
+>
+> **Realistic expectation:** ~0.5–1.0%/month (~6–10%/yr), **lumpy** month to month — **not**
+> 5%/month. A consistently higher return is not achievable under capital-preservation
+> constraints without large leverage and the matching drawdown. See [Strategy](#strategy).
 
 ---
 
@@ -34,13 +45,15 @@ memory lives in git.
 
 ## What It Does
 
-- Trades a diversified set of **18 ETFs** (equity indices + sectors + bonds (TLT) + gold (GLD)).
-- Once a month it **holds the ETFs in an uptrend** (monthly close above their 10-month SMA),
-  **equal-weighted**, and moves everything else to **cash**.
-- This is **cost-robust** (few trades, large moves) and was **profitable in every market
-  regime since 2008** in stress testing — including 2008 and 2022.
-- Sends **rebalance alerts, exit alerts, EOD and weekly reports** via Telegram.
-- **Learns between sessions**: de-risks exposure when the account draws down, restores it
+- Runs **two strategies at once** on one account, on disjoint symbol sets so they never collide:
+  - **Swing (70%):** every day it scans 16 liquid large-cap stocks for D1-trend / H4-pullback
+    setups, takes the qualifying ones (gated by a shared risk budget), and manages each with an
+    ATR-buffered stop and a 2R target.
+  - **Trend (30%):** once a month it holds the ETFs in an uptrend (monthly close above their
+    10-month SMA), equal-weighted, and moves the rest to cash — cost-robust, profitable in every
+    market regime since 2008 in stress testing.
+- Sends **plan, trade, exit, EOD and weekly** alerts via Telegram.
+- **Learns between sessions**: de-risks the trend sleeve when the account draws down, restores it
   after recovery, and flags structural parameter drift for human review.
 - Commits all state (trades, config, equity peak, snapshots) back to git on every run.
 
@@ -79,20 +92,27 @@ python runner.py --routine <name>
 
 ---
 
-## Strategy — `trend_timing_v1` (Faber GTAA trend timing)
+## Strategy — `dual_swing+trend_v1`
 
-| Parameter | Value |
-|---|---|
-| Type | Trend timing / time-series momentum, long-only |
-| Universe | 18 ETFs — equity index/sector + TLT (bonds) + GLD (gold) |
-| Rebalance | Monthly (first scheduled run of each calendar month) |
-| Hold rule | Monthly close > 10-month SMA → hold; else that sleeve → cash |
-| Allocation | Equal weight across held ETFs × `exposure` |
-| Exposure | 1.0× (full) — the single risk dial (0.33× ≈ 8% DD, 1.5× = leverage) |
-| Rebalance band | 15% — held positions are only re-traded when drift exceeds this |
-| Backstops | 3% daily loss + 25% total drawdown kill-switches (paper) |
+Two sleeves, disjoint universes, one account:
 
-**Why trend timing (and not the retired RSI-2 mean reversion):** mean reversion's thin
+| | **Swing sleeve** | **Trend sleeve** |
+|---|---|---|
+| Capital | 70% | 30% |
+| Universe | 16 liquid large-cap **stocks** | 18 **ETFs** (eq + TLT + GLD) |
+| Cadence | Daily | Monthly |
+| Signal | D1 close vs EMA200 (trend) + H4 pullback to EMA50 + RSI zone + structure/MACD/volume score | Monthly close > 10-month SMA |
+| Entry | Score above threshold, validated (spread/zone/regime) | Equal weight × `exposure` |
+| Stop / target | Structure low/high + ATR(14)×1.5 buffer / **2R** | None — exits via monthly rebalance |
+| Sizing | **1% risk** of equity per trade (shrinks on losing days) | 30%-sleeve equal weight |
+
+They never interfere: the monthly rebalance is **scoped to the ETF universe and 30% of
+capital** (`rebalance_portfolio(..., capital_frac=0.30, universe=TREND_UNIVERSE)`), so swing
+stock positions are never touched, and the swing scorer only sees the stock watchlist.
+
+### Trend sleeve — why Faber GTAA (and not the retired RSI-2 mean reversion)
+
+Mean reversion's thin
 ~0.2%/trade edge did **not** survive realistic fees + slippage or a survivorship-free
 universe (it was retired after `backtest/verify.py` showed PF 1.29 → ~1.0 at 0.15%/side and
 losing on ETF-only data). Trend timing trades rarely and rides large moves, so costs are a
@@ -101,10 +121,10 @@ negligible fraction of each trade.
 The defensive sleeves (**TLT, GLD**) are what cut the drawdown: in equity bear markets they
 often trend *up*, so the bot rotates into them instead of sitting fully in cash.
 
-### Backtest — stress-tested
+### Backtest — both sleeves, net of fees
 
-ETF-only (no survivorship bias), 2007–2026, costs charged on turnover. Reproduce with
-`python -m backtest.momentum` (writes `memory/backtests/`).
+**Trend sleeve** — ETF-only (no survivorship bias), 2007–2026, costs on turnover
+(`python -m backtest.momentum`):
 
 | Metric | 0.10% cost | 0.30% cost (realistic) |
 |---|---|---|
@@ -112,45 +132,57 @@ ETF-only (no survivorship bias), 2007–2026, costs charged on turnover. Reprodu
 | Max drawdown | 23.7% | **24.1%** |
 | Sharpe | 0.82 | **0.79** |
 
-**Per-period CAGR @ 0.30% cost — positive in every regime:**
+Positive in **every** sub-period (2008–10 +6.0%, 2011–15 +10.0%, 2016–18 +9.4%, 2019–21
++21.1%, 2022–24 +10.4%, 2025+ +14.8%). Buy & hold SPY over the same window: ~10.6% CAGR but
+**50.8%** drawdown — same return, half the pain. On the 30% allocation the trend sleeve
+contributes ~3.1%/yr.
 
-| 2008–10 | 2011–15 | 2016–18 | 2019–21 | 2022–24 | 2025+ |
+**Swing sleeve** — daily-bar proxy of the H4 system, 2021–2026, account-level 1%/6% sim,
+0.10% round-trip cost (`python -m backtest.swing`):
+
+| Trades | Win rate | Profit factor | Avg R | Return | Max DD |
 |---|---|---|---|---|---|
-| +6.0% | +10.0% | +9.4% | +21.1% | +10.4% | +14.8% |
+| 167 | 46.1% | 1.22 | 0.14 | ~0.27%/mo (~3.2%/yr) | 10.4% |
 
-For comparison, buy & hold SPY over the same window: ~10.6% CAGR but **50.8%** max drawdown.
-Same return, **half the pain.**
+The swing edge **survives fees** (PF > 1, positive avg R) but is **thin**. A daily proxy
+understates an intraday-entry edge, so live H4 should do somewhat better — but do **not**
+expect 5%/month from it.
 
-**Realistic objective (on a $100k paper account at 1.0× exposure):** ~10.5% / year ≈
-~0.84% / month → ~**$110,500 after a year**. Returns are lumpy — flat and negative months
-are normal; the yearly figure is the headline. Drawdowns up to ~24% are the deliberate
-tradeoff. Trend following wins by **asymmetry** — per-trade win rate is ~40–45%, not >50%.
+> **Blended realistic objective:** ~**0.5–1.0%/month (~6–10%/yr)**, lumpy month to month.
+> 5%/month consistently is **not** achievable under capital-preservation constraints without
+> large leverage and the matching drawdown. The headline is the yearly figure, not any month.
+> Backtest edge ≠ future returns.
 
 ---
 
 ## Risk Model (layered)
 
-Risk is enforced at four independent layers, from slow to fast:
+Rewritten 2026-06-21 by user decision: **a losing day never halts trading and there is no
+fixed position-count cap** — the system stays opportunistic, but bounded. Layers, slow to fast:
 
-1. **Position construction** — equal weight × `exposure`, capped, diversified across 18 ETFs
-   including non-correlated defensive sleeves (bonds, gold).
-2. **Adaptive exposure ladder** (slow, capital preservation) — the self-improvement loop
-   walks `exposure` down `1.0× → 0.66× → 0.33×` as realised drawdown deepens, and restores it
-   after recovery. See below.
-3. **Daily loss kill-switch** — `max_daily_loss_pct` (3%). Mostly inert for a monthly
-   strategy (few daily closes), kept as a guard.
-4. **Total drawdown kill-switch** (fast, catastrophe stop) — runs at the start of **every**
-   routine: reads live account equity, tracks the all-time peak in `equity_state.json`, and
-   **LOCKS** the bot if drawdown crosses `max_total_drawdown_pct` (25% paper). A locked bot
-   does nothing until `--routine reset`.
+1. **Position construction** — trend sleeve: equal weight × `exposure`, diversified across 18
+   ETFs incl. defensive sleeves (bonds, gold). Swing sleeve: 1% risk per trade, ATR-buffered stop.
+2. **Open-risk budget** (the swing gate, replaces the count cap) — new swing entries are allowed
+   only while the **sum of open swing risk** stays under `max_open_risk_pct` (**6%**). Good
+   setups are taken until the budget is spent — no arbitrary "max 2 trades" cut-off. A
+   `max_positions_ceiling` (20) is a sanity backstop against a runaway day.
+3. **Daily de-risk ladder** (replaces the daily kill-switch) — per-trade size shrinks as the
+   day's realised loss grows: `<1% → 1.0× · <2% → 0.66× · <3% → 0.5× · ≥3% → 0.33×` (never 0).
+   A bad day **reduces size, it does not stop the bot.**
+4. **Adaptive exposure ladder** (slow, trend sleeve) — the self-improvement loop walks trend
+   `exposure` down `1.0× → 0.66× → 0.33×` as account drawdown deepens, restoring after recovery.
+5. **Account catastrophe stop** (the ONLY hard halt) — runs at the start of **every** routine:
+   tracks all-time peak equity in `equity_state.json` and **LOCKS** the bot if drawdown crosses
+   `max_total_drawdown_pct` (25% paper / 8% funded). This is what protects a funded account from
+   prop-firm termination. A locked bot does nothing until `--routine reset`.
 
-All risk thresholds live in **`memory/config.json`** (single source of truth);
-[`config.py`](config.py) loads them at import. There is no second place to change a limit.
+All thresholds live in **`memory/config.json`** (single source of truth); [`config.py`](config.py)
+loads them at import. There is no second place to change a limit.
 
-> **Paper vs funded:** 25% total-drawdown backstop is for *paper*, where 1.0× exposure
-> expects ~24% drawdown — an 8% backstop would self-lock on the first normal dip. A real
-> funded account (8% limit) must redeploy at **0.33× exposure** and reset the backstop to 8%
-> (see [Funded Migration](#funded-account-migration)).
+> **Paper vs funded:** the 25% catastrophe stop is for *paper*. A real funded account (8% limit)
+> must set `max_total_drawdown_pct = 8` and redeploy the trend sleeve at **0.33× exposure** (see
+> [Funded Migration](#funded-account-migration)). The daily de-risk ladder protects capital well
+> before that catastrophe stop is ever reached.
 
 ---
 
@@ -205,7 +237,7 @@ Covered by `tests/test_rebalance.py` (new entries / resize / band / exit / prote
 | Market sentiment / news | [Perplexity AI](https://www.perplexity.ai) (`sonar`) |
 | Notifications | Telegram Bot API |
 | Scheduling | GitHub Actions (cron, UTC) |
-| Tests | pytest (49 tests) |
+| Tests | pytest (51 tests) |
 | Language | Python 3.11 |
 
 ---
@@ -222,9 +254,9 @@ Covered by `tests/test_rebalance.py` (new entries / resize / band / exit / prote
 | ATR Stop Loss | Volatility-adjusted stop loss + dynamic position sizing |
 | Telegram Notify | Trade alerts, exit notifications, daily P&L summary |
 
-> Several skills (ATR stops, volume, earnings) are part of the legacy per-day entry path and
-> are inactive under the monthly trend strategy. They are retained (never removed) and remain
-> available if a per-day intraday strategy is ever reactivated.
+> Under `dual_swing+trend_v1` these skills are **active again** on the swing sleeve: ATR stops and
+> volume confirmation feed `strategy/scorer.py`, the earnings filter gates entries in
+> `decision/planner.py`, and news/sentiment flags block or reduce in the premarket/open routines.
 
 ---
 
@@ -235,11 +267,11 @@ All routines run via GitHub Actions on a UTC cron and commit `memory/` back to t
 | Time (ET) | Routine | What it does |
 |---|---|---|
 | 07:00 | premarket | Health check, overnight exits, news/sentiment flags |
-| 08:00 | analysis | **Monthly trend rebalance** (acts once per month; no-op other days) |
-| 09:00 | plan | (no per-day setups under trend timing) |
-| 09:35 | open | (no per-day entries; returns early without the 5-min wait) |
-| 10:30 | midday | Position check |
-| 14:00 | afternoon | Position check |
+| 08:00 | analysis | **Swing plan (daily)** — scan stocks for setups; **+ trend rebalance** once per month |
+| 09:00 | plan | Plan checkpoint |
+| 09:35 | open | **Execute swing entries** after the 5-min wait (gated by the risk budget) |
+| 10:30 | midday | Position check + TP/SL exits |
+| 14:00 | afternoon | Position check + TP/SL exits (positions held overnight — swing, no force-close) |
 | 16:00 | review | EOD report + **self-improvement loop** (daily) |
 | Saturday 10:00 | weekly | Full weekly report + **monthly robustness re-check** |
 
@@ -262,10 +294,12 @@ the next run. **None of these are gitignored.**
 runner.py                  Single entry point (--routine <name>)
 config.py                  Loads memory/config.json; constants (watchlist, fees, thresholds)
 routines/                  One module per scheduled job (premarket … weekly)
+strategy/scorer.py         Swing setup scoring (EMA/RSI/MACD/ATR/volume) → Setup
 strategy/trend_timing.py   10-month SMA qualification + equal-weight portfolio construction
-execution/engine.py        rebalance_portfolio(), order submission, trade logging
-execution/portfolio.py     Open-position queries, exit checks, daily summary
-risk/risk_engine.py        Kill-switches (daily loss + total drawdown)
+decision/planner.py        Swing plan: scan watchlist, earnings filter, rank by score
+execution/engine.py        open_paper_trade(), rebalance_portfolio() (scoped), trade logging
+execution/portfolio.py     Open-position queries, TP/SL exit checks, daily summary
+risk/risk_engine.py        Open-risk budget + daily de-risk ladder + catastrophe stop
 state/                     daily_plan.json + equity peak / drawdown tracking
 data/market_data.py        Alpaca bars + live quotes (timeout-safe fetch)
 memory/                    Persistent state + logs (committed each run)
@@ -276,10 +310,10 @@ memory/                    Persistent state + logs (committed each run)
   ├── trend_state.json     Last rebalance month + holdings
   ├── research_notes.md    Strategy research backlog (gated on verify.py)
   └── backtests/           Backtest reports
-backtest/                  momentum.py (active), verify.py (RSI-2 stress test), engine/run
+backtest/                  swing.py (swing sleeve), momentum.py (trend sleeve), verify.py (RSI-2)
 reporting/                 Telegram, EOD + weekly reports
-src/                       Legacy/skills modules (alpaca_bridge is used in prod)
-tests/                     pytest suite (49 tests)
+src/                       Skills (ATR/volume/earnings) + alpaca_bridge (used in prod)
+tests/                     pytest suite (51 tests)
 .github/workflows/         trading_routines.yml (8 scheduled jobs + manual reset)
 ```
 
@@ -322,7 +356,8 @@ routine manually via **Actions → Trading Routines → Run workflow** (includin
 
 ```bash
 python runner.py --routine premarket
-python runner.py --routine analysis     # the monthly rebalance
+python runner.py --routine analysis     # daily swing plan + monthly trend rebalance
+python runner.py --routine open          # execute swing entries
 python runner.py --routine review        # EOD + self-improvement loop
 python runner.py --routine weekly
 python runner.py --routine reset         # clears a LOCKED kill-switch
@@ -336,8 +371,9 @@ Telegram prints to the console instead of sending).
 ## Testing
 
 ```bash
-python -m pytest -q          # 49 tests
-python -m backtest.momentum  # re-run the strategy backtest (writes memory/backtests/)
+python -m pytest -q          # 51 tests
+python -m backtest.swing     # swing-sleeve backtest, net of fees (writes memory/backtests/)
+python -m backtest.momentum  # trend-sleeve backtest (writes memory/backtests/)
 python -m backtest.verify    # RSI-2 stress test (why mean reversion was retired)
 ```
 

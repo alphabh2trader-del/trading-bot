@@ -1,13 +1,21 @@
-"""ANALYSIS — monthly trend-timing rebalance (Faber GTAA).
+"""ANALYSIS — 08:00 ET: build the day's plan for BOTH strategy sleeves.
 
-Runs daily at 08:00 ET but only acts once per calendar month: it holds the ETFs
-whose monthly close is above their 10-month SMA (equal weight, scaled by
-TREND_EXPOSURE) and moves the rest to cash. Market orders queue for the open.
+Two strategies run on one Alpaca account, on disjoint universes:
+
+  • SWING sleeve (70% of capital, DAILY): scans config.SWING_WATCHLIST (stocks)
+    with the D1-trend / H4-pullback scorer and writes the day's setups to state.
+    open/midday/afternoon then execute and manage them.
+
+  • TREND sleeve (30% of capital, MONTHLY): Faber GTAA ETF rebalance — holds each
+    ETF whose monthly close is above its 10-month SMA. Acts at most once per
+    calendar month (guarded by memory/trend_state.json) and is scoped to the ETF
+    universe + 30% capital so it never touches the swing stock positions.
 """
 from datetime import date
 
 import config
 from data.market_data import fetch_bars_safe
+from decision.planner import build_plan, setups_to_dict
 from strategy.trend_timing import target_portfolio_status, last_rebalance_month, mark_rebalanced
 from execution.engine import rebalance_portfolio
 from reporting.telegram import send_message
@@ -25,8 +33,29 @@ def _fetch_daily(symbol: str):
 
 
 def run(state: dict) -> None:
-    state["setups"] = []  # trend timing has no per-day setups; open/midday/afternoon are no-ops
+    # ---------------------------------------------------------------- SWING sleeve
+    if config.SWING_ENABLED:
+        regime = state.get("regime", "NORMAL")
+        setups = build_plan(config.SWING_WATCHLIST, regime)
+        state["setups"] = setups_to_dict(setups)
+        if setups:
+            top = setups[0]
+            send_message(
+                f"🔎 SWING PLAN — {len(setups)} setup(s) qualified (regime {regime})\n"
+                f"Top: {top.symbol} {top.direction.upper()} | score {top.score} | "
+                f"R:R {top.rr} | entry {top.entry_price}"
+            )
+        else:
+            send_message(f"🔎 SWING PLAN — no qualifying setups today (regime {regime}).")
+    else:
+        state["setups"] = []
 
+    # ---------------------------------------------------------------- TREND sleeve
+    if config.TREND_TIMING_ENABLED:
+        _rebalance_trend(state)
+
+
+def _rebalance_trend(state: dict) -> None:
     this_month = date.today().strftime("%Y-%m")
     if last_rebalance_month() == this_month:
         return  # already rebalanced this month
@@ -38,13 +67,19 @@ def run(state: dict) -> None:
     # retries instead of trading (or liquidating) on incomplete information.
     if len(failed) > len(universe) * _MAX_FAIL_FRACTION:
         send_message(
-            f"⚠ REBALANCE ABORTED — data unavailable for {len(failed)}/{len(universe)} ETFs "
+            f"⚠ TREND REBALANCE ABORTED — data unavailable for {len(failed)}/{len(universe)} ETFs "
             f"({', '.join(failed)}). Will retry on the next run; month NOT marked done."
         )
         return
 
-    # Symbols we couldn't evaluate are protected from liquidation this run.
-    actions = rebalance_portfolio(target, protect=set(failed))
+    # Scope to the ETF universe + 30% capital sleeve so swing stock positions are
+    # never touched; protect symbols we couldn't evaluate from liquidation this run.
+    actions = rebalance_portfolio(
+        target,
+        protect=set(failed),
+        capital_frac=config.TREND_CAPITAL_ALLOCATION,
+        universe=set(universe),
+    )
     mark_rebalanced(this_month, list(target.keys()))
     state["holdings"] = list(target.keys())
 
@@ -55,7 +90,8 @@ def run(state: dict) -> None:
     if actions.get("protected"):
         extra += f" | Protected {len(actions['protected'])} (no data)"
     send_message(
-        f"📅 MONTHLY REBALANCE — {this_month} (exposure {config.TREND_EXPOSURE}x)\n"
+        f"📅 MONTHLY TREND REBALANCE — {this_month} "
+        f"(30% sleeve, exposure {config.TREND_EXPOSURE}x)\n"
         f"Holding {len(target)} ETFs: {held}\n"
         f"Bought {len(actions['bought'])} | Sold {len(actions['sold'])} | "
         f"Kept {len(actions['held'])}{extra}"

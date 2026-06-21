@@ -42,20 +42,13 @@ def build_plan(watchlist: list[str], regime: str) -> list[Setup]:
 
         candidates.append(setup)
 
+    # Return ALL qualifying setups, best score first. We no longer cap to the top-2
+    # (user decision 2026-06-21): a good opportunity should never be dropped just to
+    # respect a count. Execution gates the list by the open-risk budget and the
+    # per-sector cap (risk/risk_engine.py), so concentration stays bounded without
+    # throwing away signal here.
     candidates.sort(key=lambda s: s.score, reverse=True)
-    return _top2_different_sectors(candidates)
-
-
-def _top2_different_sectors(setups: list[Setup]) -> list[Setup]:
-    result = []
-    seen_sectors = set()
-    for s in setups:
-        if s.sector not in seen_sectors:
-            result.append(s)
-            seen_sectors.add(s.sector)
-        if len(result) == 2:
-            break
-    return result
+    return candidates
 
 
 def setups_to_dict(setups: list[Setup]) -> list[dict]:

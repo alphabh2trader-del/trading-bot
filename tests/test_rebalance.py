@@ -95,6 +95,20 @@ def test_rebalance_exits_dropped_symbol(monkeypatch):
     assert actions["sold"] == ["SPY"]
 
 
+def test_rebalance_scopes_to_universe_leaves_swing_positions(monkeypatch):
+    # A swing stock position (AAPL) must NEVER be touched by the trend ETF rebalance,
+    # even though it's absent from the trend target. Scoping by `universe` enforces it.
+    pos = [{"symbol": "AAPL", "qty": 100, "market_value": 20_000}]
+    orders = _patch(monkeypatch, equity=100_000, positions=pos, price=100.0)
+    actions = engine.rebalance_portfolio(
+        {"SPY": 1.0}, capital_frac=0.30, universe={"SPY", "QQQ", "TLT"},
+    )
+    assert ("AAPL", "CLOSE", "") not in orders          # swing position untouched
+    assert "AAPL" not in actions["sold"]
+    # SPY bought on the 30% sleeve: 100k * 0.30 * 1.0 / 100 = 300 shares.
+    assert ("SPY", 300.0, "long") in orders
+
+
 def test_rebalance_protects_unknown_symbol(monkeypatch):
     # SPY absent from target but its data was unavailable this run -> never liquidate.
     pos = [{"symbol": "SPY", "qty": 500, "market_value": 50_000}]

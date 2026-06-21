@@ -19,7 +19,8 @@ def open_paper_trade(setup: dict, risk_multiplier: float = 1.0) -> dict:
     sl = setup["stop_loss"]
     tp = setup["take_profit"]
     risk_per_share = abs(entry - sl)
-    risk_usd = equity * (config.MAX_RISK_PER_TRADE / 100) * risk_multiplier
+    applied_risk_pct = config.MAX_RISK_PER_TRADE * risk_multiplier
+    risk_usd = equity * (applied_risk_pct / 100)
     size = round(risk_usd / risk_per_share, 2) if risk_per_share > 0 else 0
 
     is_meanrev = setup.get("strategy") == "meanrev"
@@ -57,7 +58,7 @@ def open_paper_trade(setup: dict, risk_multiplier: float = 1.0) -> dict:
         "stop_loss": sl,
         "take_profit": tp_value,
         "position_size": size,
-        "risk_pct": config.MAX_RISK_PER_TRADE,
+        "risk_pct": round(applied_risk_pct, 4),
         "risk_usd": round(risk_usd, 2),
         "potential_usd": potential,
         "status": "open",
@@ -100,11 +101,12 @@ def _log_trend_open(symbol: str, price: float, qty: float, weight: float, order_
     _append_trade(trade)
 
 
-def rebalance_portfolio(target_weights: dict, protect: set | None = None) -> dict:
+def rebalance_portfolio(target_weights: dict, protect: set | None = None,
+                        capital_frac: float = 1.0, universe: set | None = None) -> dict:
     """Monthly trend-timing rebalance to target weights.
 
     For every symbol in (target ∪ currently held) we compare the CURRENT position
-    (Alpaca is the source of truth) to its target dollar value (equity × weight):
+    (Alpaca is the source of truth) to its target dollar value (capital_base × weight):
       - target 0 & held  -> SELL to cash (a trend broke down) ... UNLESS protected
       - not held & target -> BUY the target quantity (newly entered an uptrend)
       - held & target     -> RESIZE toward the target weight, but only when the
@@ -115,16 +117,27 @@ def rebalance_portfolio(target_weights: dict, protect: set | None = None) -> dic
     `protect` = symbols whose data could not be fetched this run; they are NEVER sold
     (we can't tell if they're still in trend), preventing a data outage from
     liquidating the book.
+
+    `capital_frac` scales the dollar base to this sleeve's share of the account
+    (0.30 = trend sleeve runs on 30% of equity; the swing sleeve owns the rest).
+
+    `universe` (if given) restricts the rebalance to that symbol set: positions
+    OUTSIDE it (e.g. swing stock positions) are never touched. This is what lets the
+    trend ETF sleeve and the swing stock sleeve coexist in one Alpaca account.
     """
     from src.execution.alpaca_bridge import get_account, get_positions, submit_market_order, close_position
 
     protect = protect or set()
     band = float(getattr(config, "REBALANCE_BAND", 0.15))
     equity = get_account()["equity"]
+    capital_base = equity * float(capital_frac)
     positions = {p["symbol"]: p for p in get_positions()}
     actions = {"bought": [], "sold": [], "resized": [], "held": [], "protected": []}
 
     for symbol in sorted(set(target_weights) | set(positions)):
+        # Stay inside this sleeve — never touch positions from the other strategy.
+        if universe is not None and symbol not in universe:
+            continue
         weight = float(target_weights.get(symbol, 0.0))
         pos = positions.get(symbol)
         cur_qty = float(pos["qty"]) if pos else 0.0
@@ -151,7 +164,7 @@ def rebalance_portfolio(target_weights: dict, protect: set | None = None) -> dic
             if cur_qty > 0:
                 actions["held"].append(symbol)
             continue
-        target_val = equity * weight
+        target_val = capital_base * weight
         target_qty = round(target_val / price, 4)
 
         # --- New entry ---

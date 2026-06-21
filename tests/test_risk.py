@@ -25,19 +25,37 @@ def test_total_drawdown_tracks_peak(tmp_path, monkeypatch):
     assert risk_state.update_total_drawdown(11_000) == 0.0
 
 
-def test_can_open_trade_blocks_on_daily_drawdown():
-    state = {"daily_drawdown": config.MAX_DRAWDOWN_PCT, "exposure_pct": 0.0}
+def test_daily_drawdown_does_not_halt_only_shrinks_size(monkeypatch):
+    # New risk model: a daily loss NEVER blocks a trade — it only reduces size.
+    monkeypatch.setattr(risk_engine, "_open_swing_risk_pct", lambda: 0.0)
+    monkeypatch.setattr("execution.portfolio.get_open_trades", lambda: [])
+    state = {"daily_drawdown": config.MAX_DRAWDOWN_PCT}
     allowed, _ = risk_engine.can_open_trade(state)
-    assert allowed is False
+    assert allowed is True
+    # ...but the per-trade size multiplier has shrunk below 1.0.
+    assert risk_engine.daily_risk_multiplier(state) < 1.0
+    # A clean day trades full size.
+    assert risk_engine.daily_risk_multiplier({"daily_drawdown": 0.0}) == 1.0
 
 
-def test_can_open_trade_blocks_on_exposure():
-    state = {"daily_drawdown": 0.0, "exposure_pct": config.MAX_TOTAL_EXPOSURE}
-    allowed, _ = risk_engine.can_open_trade(state)
+def test_can_open_trade_blocks_when_risk_budget_spent(monkeypatch):
+    # No position-count cap; the gate is the aggregate open-risk budget.
+    monkeypatch.setattr(risk_engine, "_open_swing_risk_pct", lambda: config.MAX_OPEN_RISK_PCT)
+    monkeypatch.setattr("execution.portfolio.get_open_trades", lambda: [])
+    allowed, reason = risk_engine.can_open_trade({"daily_drawdown": 0.0})
     assert allowed is False
+    assert "budget" in reason.lower()
+
+
+def test_can_open_trade_allows_within_budget(monkeypatch):
+    monkeypatch.setattr(risk_engine, "_open_swing_risk_pct", lambda: 0.0)
+    monkeypatch.setattr("execution.portfolio.get_open_trades", lambda: [])
+    allowed, _ = risk_engine.can_open_trade({"daily_drawdown": 0.0})
+    assert allowed is True
 
 
 def test_sector_allowed_respects_cap():
-    state = {"open_sectors": ["tech"]}
-    assert risk_engine.sector_allowed("tech", state) is False  # SECTOR_MAX = 1
-    assert risk_engine.sector_allowed("finance", state) is True
+    # SECTOR_MAX = 2 now: a single open tech position still allows one more.
+    assert risk_engine.sector_allowed("tech", {"open_sectors": ["tech"]}) is True
+    assert risk_engine.sector_allowed("tech", {"open_sectors": ["tech", "tech"]}) is False
+    assert risk_engine.sector_allowed("finance", {"open_sectors": ["tech", "tech"]}) is True

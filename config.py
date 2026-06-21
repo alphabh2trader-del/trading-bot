@@ -27,11 +27,20 @@ REGIME_BONUS = {"TREND": 10, "NORMAL": 0, "CHOP": -10, "EXTREME": 0}
 
 # --- Risk (sourced from memory/config.json — single source of truth) ---
 MAX_RISK_PER_TRADE = float(_RISK.get("risk_per_trade_pct", 1.0))       # % of equity per trade
-MAX_CONCURRENT_POSITIONS = int(_RISK.get("max_open_trades", 2))
-MAX_DRAWDOWN_PCT = float(_RISK.get("max_daily_loss_pct", 3.0))         # daily kill-switch (was 2.0; aligned to spec/config.json)
-MAX_TOTAL_DRAWDOWN_PCT = float(_RISK.get("max_total_drawdown_pct", 8.0))  # account-level kill-switch
-MAX_TOTAL_EXPOSURE = 6.0    # % of equity at risk (allows up to 6 positions @ 1% risk)
-SECTOR_MAX = 1              # max 1 open position per sector (diversification)
+MAX_CONCURRENT_POSITIONS = int(_RISK.get("max_open_trades", 6))        # legacy (informational); gating is by risk budget below
+MAX_DRAWDOWN_PCT = float(_RISK.get("max_daily_loss_pct", 3.0))         # daily loss reference (no longer halts — drives the de-risk ladder)
+MAX_TOTAL_DRAWDOWN_PCT = float(_RISK.get("max_total_drawdown_pct", 8.0))  # account-level catastrophe halt (the ONLY hard stop)
+MAX_TOTAL_EXPOSURE = 6.0    # % of equity at risk (informational)
+
+# Risk model (user decision 2026-06-21): no daily halt, no fixed position-count cap.
+# New swing entries are gated by an aggregate OPEN-RISK budget; per-trade size shrinks
+# as the day's realised loss grows (a bad day reduces size, never blocks a trade).
+MAX_OPEN_RISK_PCT = float(_RISK.get("max_open_risk_pct", 6.0))         # sum of open swing risk_pct must stay under this
+MAX_POSITIONS_CEILING = int(_RISK.get("max_positions_ceiling", 20))   # sanity backstop against a runaway day
+# [loss_pct_threshold, size_multiplier] — first row whose threshold the daily loss is
+# still BELOW wins. e.g. -1.5% loss -> 0.66x size; -3%+ -> 0.33x. Never 0 (never blocks).
+DAILY_DERISK_LADDER = _RISK.get("daily_derisk_ladder", [[1.0, 1.0], [2.0, 0.66], [3.0, 0.5], [100.0, 0.33]])
+SECTOR_MAX = 2             # max open positions per sector (was 1; raised so good clustered setups aren't all dropped)
 
 # --- Execution ---
 MAX_SPREAD_PCT = 0.20
@@ -64,9 +73,13 @@ MEANREV_MAX_HOLD = 10
 # These are sourced from memory/config.json ("trend" section) so the self-improvement
 # loop (memory/adaptive.py) can adjust exposure for capital preservation and persist it.
 _TREND = _CFG.get("trend", {})
+_SWING = _CFG.get("swing", {})
+TREND_TIMING_ENABLED = bool(_TREND.get("enabled", True))
+TREND_CAPITAL_ALLOCATION = float(_TREND.get("capital_allocation", 0.30))  # 30% sleeve; the rest funds swing buying power
+SWING_ENABLED = bool(_SWING.get("enabled", True))
 TREND_SMA_MONTHS = int(_TREND.get("sma_months", 10))   # hold ETF when monthly close > N-month SMA
 TREND_SMA_DAYS = 200        # ~10 months, used for the minimum-history check
-TREND_EXPOSURE = float(_TREND.get("exposure", 1.0))    # 1.0 = full; <1 de-risk, >1 leverage (scales return AND drawdown)
+TREND_EXPOSURE = float(_TREND.get("exposure", 1.0))    # 1.0 = fully invest the 30% sleeve; <1 de-risk, >1 leverage
 TREND_BASE_EXPOSURE = float(_TREND.get("base_exposure", 1.0))  # the exposure to restore to after recovery
 # Rebalance band: a held position is only re-traded toward its target weight when it
 # drifts more than this fraction away. Keeps the book ~equal-weight and lets an
@@ -80,7 +93,16 @@ TREND_UNIVERSE = [
     "SPY", "QQQ", "IWM", "DIA", "XLF", "XLK", "XLE", "XLV", "XLY",
     "XLP", "XLI", "XLU", "XLB", "SMH", "XBI", "KRE", "TLT", "GLD",
 ]
-BASE_WATCHLIST = TREND_UNIVERSE
+
+# --- Swing watchlist (DISJOINT from TREND_UNIVERSE) ---
+# Liquid large-caps with tight spreads and high RVOL — the daily D1/H4 pullback
+# system trades these. Kept separate from the ETF trend sleeve so the two
+# strategies never fight over the same symbol (rebalance scopes to TREND_UNIVERSE).
+SWING_WATCHLIST = [
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA",
+    "AMD", "NFLX", "JPM", "V", "UNH", "CRM", "COST", "AVGO", "QCOM",
+]
+BASE_WATCHLIST = SWING_WATCHLIST
 
 SECTOR_MAP = {
     # ETFs (each its own "sector" bucket so concurrency caps still apply sensibly)
@@ -88,11 +110,12 @@ SECTOR_MAP = {
     "XLF": "etf-fin", "XLK": "etf-tech", "XLE": "etf-energy", "XLV": "etf-health",
     "XLY": "etf-cons", "XLP": "etf-staples", "XLI": "etf-ind", "XLU": "etf-util",
     "XLB": "etf-mat", "SMH": "etf-semi", "XBI": "etf-bio", "KRE": "etf-banks",
-    # stocks
-    "AAPL": "tech", "MSFT": "tech", "NVDA": "tech",
+    # stocks (swing watchlist)
+    "AAPL": "tech", "MSFT": "tech", "NVDA": "semi",
     "AMZN": "consumer", "GOOGL": "tech", "META": "tech",
     "TSLA": "auto", "JPM": "finance", "V": "finance",
-    "UNH": "health", "AMD": "tech", "NFLX": "consumer",
+    "UNH": "health", "AMD": "semi", "NFLX": "consumer",
+    "CRM": "software", "COST": "consumer", "AVGO": "semi", "QCOM": "semi",
 }
 
 # --- Broker fees (sell-side) ---

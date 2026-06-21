@@ -94,3 +94,14 @@ unused `main.py` entry point. They are now wired into the live `runner.py` → r
   notifications run through `reporting/telegram.py` in every routine.
 
 ---
+
+## 2026-06-21 — Skills REACTIVATED under dual_swing+trend_v1
+
+The swing sleeve restores the per-day entry path, so these skills are live again:
+- **ATR Stop Loss** → `calculate_atr_stop()` sets the volatility-buffered stop in `strategy/scorer.py`.
+- **Volume Analysis** → `get_volume_signal()` scores/filters in `strategy/scorer.py`.
+- **Earnings Filter** → `is_earnings_within()` blocks entries in `decision/planner.py`.
+- **News / Sentiment** → block/reduce flags applied in `routines/premarket.py` + `routines/open.py`.
+Trend sleeve (ETF monthly) carries no per-trade stop, so it ignores ATR/volume/earnings by design.
+
+---
