@@ -1,83 +1,73 @@
-# CURRENT ACTIVE STRATEGY — v1.0
+# CURRENT ACTIVE STRATEGY — v2.0
 
 ## Version
 
-- ID: swing_core_v1
-- Created: 2026-06-19
+- ID: meanrev_rsi2_v1
+- Created: 2026-06-21
 - Status: ACTIVE (paper trading)
+- Replaces: swing_core_v1 (trend pullback — backtested NEGATIVE, retired; see strategy_history.md)
 
 ## Strategy Type
 
-Swing Trading — NO day trading allowed.
+Short-term swing **mean reversion** (Connors RSI-2 family), long-only. NO day trading
+(positions are held overnight, exit on a daily rule). NO counter-trend shorts.
 
-## Timeframes
+## Universe
 
-- Trend: Daily (D1)
-- Entry: 4H (H4)
+26 liquid symbols: index/sector ETFs (SPY, QQQ, IWM, DIA, XLF, XLK, XLE, XLV, XLY,
+XLP, XLI, XLU, XLB, SMH, XBI, KRE) + large caps (AAPL, MSFT, NVDA, AMZN, GOOGL, META,
+TSLA, JPM, V, UNH). Mean reversion is strongest on liquid ETFs.
 
-## Trend Filter
+## Rules (daily bars)
 
-EMA 200 on D1:
-- Price > EMA200 → LONG bias only
-- Price < EMA200 → SHORT bias only
-- No counter-trend trades allowed
+ENTRY (long):
+- Close > SMA(200)  — only buy dips inside an uptrend
+- Wilder RSI(2) < 10 — short-term oversold
+- Entered at the next session's open (market order)
 
-## Entry Logic
+EXIT (whichever first):
+- Close > SMA(5)  — primary, rule-based (mean reversion completed)
+- Price <= entry × 0.92  — disaster stop (-8%)
+- Held >= 10 sessions  — time stop
 
-### LONG
+## Risk Management
 
-1. D1 price above EMA 200 (bullish trend confirmed)
-2. Price retraces to EMA 50 OR key support zone on H4
-3. RSI 14 between 40–55 and rising
-4. Candle confirmation: bullish engulfing or strong rejection wick
-
-### SHORT
-
-1. D1 price below EMA 200 (bearish trend confirmed)
-2. Price retraces to EMA 50 OR key resistance zone on H4
-3. RSI 14 between 45–60 and falling
-4. Candle confirmation: bearish engulfing or rejection wick
-
-## Exit Rules
-
-- Take Profit: 1.5R – 2R
-- Stop Loss: structure-based (last swing high/low)
-- Trailing SL: only when logically justified, never emotional
+- 1% account risk per trade, sized against the 8% disaster stop (~12.5% equity/position)
+- Max 6 concurrent positions, max 1 per sector bucket (diversification)
+- Total risk exposure cap: 6%
+- Daily kill-switch: 3% | Total drawdown kill-switch: 8% (enforced in risk_engine)
+- EXTREME market regime (SPY) and news/earnings/sentiment filters block new entries
 
 ## Validation Status
 
-- Backtested: YES — 2026-06-21 (see memory/backtests/)
-- Paper traded: NO (starting now)
-- Live traded: NO — **DO NOT** deploy live; current edge is negative.
+- Backtested: YES — train 2010-2018 + OUT-OF-SAMPLE test 2019-2024 (incl. COVID crash)
+- Paper traded: starting now
+- Live traded: NO (unlock per CLAUDE.md: win rate >= 60% over 30d, DD < 8%, >= 10 trades)
 
-### Backtest result — 2026-06-21 (10-symbol watchlist, ~540d H4, threshold 65)
+### Backtest results (yfinance daily, next-open entry, 0.05%/side slippage)
 
-- Trades: 56 | Win rate: **30.4%** | Profit factor: **0.87** | Expectancy: **-0.089 R/trade**
-- Target was 55–60% win rate. With +2R/-1R the breakeven win rate is 33.3%, so the
-  strategy is currently **below breakeven** — it would lose money net of slippage/fees.
-- Conclusion: **swing_core_v1 is NOT validated.** The setup edge needs improvement
-  (entry filters, level/zone quality, RR, regime gating) before paper results can be
-  trusted or live trading considered. Re-run `python -m backtest.run` after each change.
+Per-trade edge (26 symbols):
+- TRAIN 2010-2018: 1830 trades, 68.5% win, PF 1.41
+- TEST 2019-2024 (OOS): 1064 trades, **67.4% win, PF 1.29**, +0.23%/trade
 
-Note: a backtest also exposed that the old `detect_structure` (strictly monotonic
-highs/lows) fired ~1 in 540 bars, so the strategy produced essentially no setups; it
-was replaced with a half-window higher-high/higher-low structure check (2026-06-21).
+Portfolio (OOS, deployed config — 6 positions, 1% risk):
+- **CAGR ~7.4% | max drawdown ~7.1% | Sharpe ~0.89**
 
-### Parameter sweep — 2026-06-21 (`python -m backtest.sweep`)
+The edge holds out-of-sample. Win rate (67%) exceeds the 55-60% target; drawdown (7.1%)
+is within the 8% mandate. Reproduce with `python -m backtest.meanrev_report`.
 
-Swept take-profit (2.0/2.5/3.0 R) × volume-confirmation requirement (off/on) at
-threshold 65 on the 10-symbol watchlist (~540d H4). **Every combination stayed
-unprofitable** (PF 0.77–0.93, all expectancies negative). At each TP the win rate sat
-3–4 points BELOW that TP's breakeven (e.g. TP 2.0 needs 33.3%, got 30.4%; TP 3.0 needs
-25%, got 23.2%). Requiring volume confirmation hurt results; raising TP beyond 2R only
-shifts breakeven without the signal ever clearing it.
+## REALISTIC OBJECTIVE (paper account)
 
-**Diagnosis: the entry signal has no demonstrable edge** on this universe/period —
-tuning trade geometry or filters cannot fix that. Real improvement requires reworking
-the entry signal itself (different features, true SPY-regime gating in-sample, a
-different/curated universe, exit logic), which is signal research, not parameter tuning.
-Defaults kept spec-compliant (TP 2.0R, no hard volume filter); `TP_R_MULT` /
-`REQUIRE_VOLUME_CONFIRM` config knobs + `backtest/sweep.py` retained for future research.
+Assuming the Alpaca paper default of **$100,000**:
 
-**Status: DO NOT trade live. Treat paper results as unvalidated until a reworked signal
-backtests with a positive edge (target win rate >50% at 2R, or PF > 1.3).**
+- Expected average: **~0.6% / month (~7% / year)** — i.e. ~**+$600 in an average month**,
+  ending the month around **$100,600**; ~$107,000 after a year.
+- This is an AVERAGE: individual months vary widely. Good months can be +2-3%
+  (~+$2,000-3,000); some months are flat or negative. Expect drawdowns up to ~7%.
+- NOT a guarantee. Backtested edge ≠ future returns. The target is honest and
+  risk-controlled, not a get-rich number — +10%/month is not achievable without
+  leverage that would breach the 8% drawdown limit and risk the funded account.
+
+To push returns higher one would raise position count or per-trade risk, but the
+backtest shows that pushes max drawdown above 8% (prop-firm account-ending) — so the
+deployed config deliberately caps risk at the mandate.

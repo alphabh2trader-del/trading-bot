@@ -5,7 +5,7 @@ from pathlib import Path
 
 import config
 from data.market_data import get_live_quote
-from src.execution.alpaca_bridge import get_account, submit_bracket_order, close_position
+from src.execution.alpaca_bridge import get_account, submit_bracket_order, submit_market_order, close_position
 from memory.logger import log_execution_entry
 from memory.trade_schema import TRADE_FIELDNAMES as FIELDNAMES
 
@@ -22,18 +22,31 @@ def open_paper_trade(setup: dict, risk_multiplier: float = 1.0) -> dict:
     risk_usd = equity * (config.MAX_RISK_PER_TRADE / 100) * risk_multiplier
     size = round(risk_usd / risk_per_share, 2) if risk_per_share > 0 else 0
 
-    # Submit bracket order to Alpaca — TP and SL are handled automatically
-    try:
-        order = submit_bracket_order(
-            symbol=setup["symbol"],
-            qty=size,
-            side=setup["direction"],
-            take_profit_price=tp,
-            stop_loss_price=sl,
-        )
-        alpaca_order_id = order["order_id"]
-    except Exception as e:
-        alpaca_order_id = f"ERROR:{e}"
+    is_meanrev = setup.get("strategy") == "meanrev"
+    if is_meanrev:
+        # Mean reversion: market entry, no bracket TP (exit is rule-based and
+        # managed by the daily routines). The disaster stop is software-managed.
+        try:
+            order = submit_market_order(setup["symbol"], size, setup["direction"])
+            alpaca_order_id = order["order_id"]
+        except Exception as e:
+            alpaca_order_id = f"ERROR:{e}"
+        tp_value = ""
+        potential = ""
+        notes = f"meanrev | {setup.get('reason', '')}"
+    else:
+        # Trend setups: bracket order — TP and SL handled automatically by Alpaca.
+        try:
+            order = submit_bracket_order(
+                symbol=setup["symbol"], qty=size, side=setup["direction"],
+                take_profit_price=tp, stop_loss_price=sl,
+            )
+            alpaca_order_id = order["order_id"]
+        except Exception as e:
+            alpaca_order_id = f"ERROR:{e}"
+        tp_value = tp
+        potential = round(size * abs(tp - entry), 2)
+        notes = setup.get("reason", "")
 
     trade = {
         "trade_id": str(uuid.uuid4())[:8],
@@ -42,11 +55,11 @@ def open_paper_trade(setup: dict, risk_multiplier: float = 1.0) -> dict:
         "direction": setup["direction"],
         "entry_price": entry,
         "stop_loss": sl,
-        "take_profit": tp,
+        "take_profit": tp_value,
         "position_size": size,
         "risk_pct": config.MAX_RISK_PER_TRADE,
         "risk_usd": round(risk_usd, 2),
-        "potential_usd": round(size * abs(tp - entry), 2),
+        "potential_usd": potential,
         "status": "open",
         "exit_price": "",
         "exit_timestamp": "",
@@ -55,7 +68,7 @@ def open_paper_trade(setup: dict, risk_multiplier: float = 1.0) -> dict:
         "fees_usd": "",
         "net_pnl_usd": "",
         "alpaca_order_id": alpaca_order_id,
-        "notes": setup.get("reason", ""),
+        "notes": notes,
     }
 
     _append_trade(trade)

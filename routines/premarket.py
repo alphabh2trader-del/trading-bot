@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 import config
 from data.universe import build_watchlist
-from execution.portfolio import check_tp_sl_hits
+from execution.portfolio import check_tp_sl_hits, check_meanrev_exits
 from reporting.telegram import send_message, send_exit_alert
 from src.skills.sentiment import sentiment_report
 
@@ -68,8 +68,8 @@ def run(state: dict) -> None:
     watchlist = build_watchlist()
     state["watchlist"] = watchlist
 
-    # 2. Check overnight TP/SL hits
-    closed = check_tp_sl_hits(timeframe="1Day")
+    # 2. Check overnight exits (bracket TP/SL + mean-reversion rule/stop)
+    closed = check_tp_sl_hits(timeframe="1Day") + check_meanrev_exits()
     for t in closed:
         send_exit_alert(t)
 

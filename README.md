@@ -6,29 +6,45 @@ An autonomous swing trading system built for prop firm funded accounts. Runs ful
 
 ## What It Does
 
-- Scans a watchlist of 10 US stocks every trading day
-- Detects swing trade setups using EMA, RSI, and candlestick patterns
-- Manages risk automatically (position sizing, stop loss, drawdown limits)
+- Scans 26 liquid US ETFs and large caps every trading day
+- Detects **mean-reversion** swing setups (Connors RSI-2) — buys short-term dips inside an uptrend
+- Manages risk automatically (position sizing, disaster stop, drawdown limits, diversification)
 - Sends trade alerts and daily summaries via Telegram
-- Saves performance data and adapts its parameters weekly
+- Saves performance data to git on every run
 - Runs in **paper trading mode** by default before going live
 
 ---
 
-## Strategy
+## Strategy — `meanrev_rsi2_v1` (Connors RSI-2 mean reversion)
 
 | Parameter | Value |
 |---|---|
-| Type | Swing trading only (no day trading) |
-| Timeframes | Daily (trend) + 4H (entry) |
-| Trend filter | EMA 200 |
-| Entry trigger | EMA 50 pullback + RSI 40–55 + bullish/bearish candle |
-| Risk per trade | 1% of equity |
-| Take profit | 1.5R – 2R |
-| Stop loss | ATR-based (1.5× ATR from entry) |
-| Max open trades | 2 |
-| Max daily loss | 3% |
-| Max drawdown | 8% |
+| Type | Swing mean reversion, long-only (no day trading) |
+| Universe | 26 liquid ETFs + large caps |
+| Timeframe | Daily |
+| Trend filter | Close > SMA 200 |
+| Entry | Wilder RSI(2) < 10 (oversold), entered next open |
+| Exit | Close > SMA 5, or −8% disaster stop, or 10-day time stop |
+| Risk per trade | 1% of equity (sized vs the 8% stop) |
+| Max open positions | 6 (max 1 per sector) |
+| Max daily loss / total drawdown | 3% / 8% (hard kill-switches) |
+
+### Backtest (yfinance daily, out-of-sample 2019–2024, incl. COVID crash)
+
+| Metric | In-sample (2010–18) | **Out-of-sample (2019–24)** |
+|---|---|---|
+| Win rate | 68.5% | **67.4%** |
+| Profit factor | 1.41 | **1.29** |
+| Portfolio CAGR | — | **~7.4%** |
+| Max drawdown | — | **~7.1%** (under the 8% mandate) |
+| Sharpe | — | **~0.89** |
+
+Reproduce: `python -m backtest.meanrev_report` (integrated) or `python -m backtest.research` (research grid).
+
+**Realistic objective (on a $100k paper account):** ~0.6% / month on average (~7% / year),
+ending an average month near **$100,600**. Months vary — good ones reach +2–3%, some are
+flat or negative, with drawdowns up to ~7%. This is honest and risk-controlled: +10%/month
+is not achievable without leverage that would breach the 8% drawdown limit.
 
 ---
 
@@ -62,12 +78,12 @@ An autonomous swing trading system built for prop firm funded accounts. Runs ful
 
 | Time (ET) | Routine | What it does |
 |---|---|---|
-| 07:00 | premarket | Rebuild watchlist, check overnight news |
-| 08:00 | analysis | Compute market regime, score all tickers |
-| 09:00 | plan | Build trade plan for the day |
-| 09:35 | open | Execute valid setups (5-min wait after open) |
-| 10:30 | midday | Check TP/SL hits, exits only |
-| 14:00 | afternoon | Final position check before close |
+| 07:00 | premarket | Check overnight exits, news/sentiment flags |
+| 08:00 | analysis | Scan universe for RSI-2 mean-reversion setups |
+| 09:00 | plan | Confirm the day's setups |
+| 09:35 | open | Enter setups at market (5-min wait after open) |
+| 10:30 | midday | Rule-based exits (close>SMA5 / stop) |
+| 14:00 | afternoon | Rule-based exits; positions held overnight |
 | 16:00 | review | EOD report + adaptive parameter learning |
 | Saturday 10:00 | weekly | Full weekly report sent to Telegram |
 

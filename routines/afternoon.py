@@ -3,14 +3,14 @@
 This is a SWING bot (NO day trading): positions are held overnight and exit
 only on their TP/SL bracket, never force-closed at the end of the session.
 """
-from execution.portfolio import check_tp_sl_hits, get_open_trades
+from execution.portfolio import check_tp_sl_hits, check_meanrev_exits, get_open_trades
 from reporting.telegram import send_message, send_exit_alert
 from risk.risk_engine import update_drawdown
 
 
 def run(state: dict) -> None:
-    # Check TP/SL hits since midday — exits are driven by the bracket order only.
-    closed = check_tp_sl_hits(timeframe="4Hour")
+    # Exits: trend bracket fills (TP/SL) + rule-based mean-reversion exits.
+    closed = check_tp_sl_hits(timeframe="1Day") + check_meanrev_exits()
     for t in closed:
         send_exit_alert(t)
         update_drawdown(state)

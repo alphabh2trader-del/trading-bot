@@ -30,8 +30,8 @@ MAX_RISK_PER_TRADE = float(_RISK.get("risk_per_trade_pct", 1.0))       # % of eq
 MAX_CONCURRENT_POSITIONS = int(_RISK.get("max_open_trades", 2))
 MAX_DRAWDOWN_PCT = float(_RISK.get("max_daily_loss_pct", 3.0))         # daily kill-switch (was 2.0; aligned to spec/config.json)
 MAX_TOTAL_DRAWDOWN_PCT = float(_RISK.get("max_total_drawdown_pct", 8.0))  # account-level kill-switch
-MAX_TOTAL_EXPOSURE = 3.0    # % of equity
-SECTOR_MAX = 1              # max 1 open position per sector
+MAX_TOTAL_EXPOSURE = 6.0    # % of equity at risk (allows up to 6 positions @ 1% risk)
+SECTOR_MAX = 1              # max 1 open position per sector (diversification)
 
 # --- Execution ---
 MAX_SPREAD_PCT = 0.20
@@ -49,20 +49,40 @@ EARNINGS_BUFFER_DAYS = 3    # block setups with earnings within N days
 VOLUME_CONFIRM_BONUS = 5    # score bonus when volume confirms the signal
 REQUIRE_VOLUME_CONFIRM = False  # if True, reject setups without volume confirmation
 
-# --- Trade geometry ---
+# --- Trade geometry (legacy trend scorer) ---
 TP_R_MULT = 2.0             # take-profit distance as a multiple of risk (R)
 
+# --- Mean reversion (Connors RSI-2) — ACTIVE strategy ---
+MEANREV_RSI_PERIOD = 2      # Wilder RSI period
+MEANREV_RSI_THRESHOLD = 10  # enter long when RSI(2) < this (oversold)
+MEANREV_TREND_SMA = 200     # only trade longs above this SMA (uptrend filter)
+MEANREV_EXIT_SMA = 5        # exit when close rises back above this SMA
+MEANREV_STOP_PCT = 0.08     # disaster stop: exit if price <= entry*(1-this)
+MEANREV_MAX_HOLD = 10       # force-exit after this many sessions
+
 # --- Watchlist ---
-BASE_WATCHLIST = [
+# Mean reversion works best on liquid index/sector ETFs; large caps included too.
+ETF_WATCHLIST = [
+    "SPY", "QQQ", "IWM", "DIA", "XLF", "XLK", "XLE", "XLV",
+    "XLY", "XLP", "XLI", "XLU", "XLB", "SMH", "XBI", "KRE",
+]
+STOCK_WATCHLIST = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL",
     "META", "TSLA", "JPM", "V", "UNH",
 ]
+BASE_WATCHLIST = ETF_WATCHLIST + STOCK_WATCHLIST
 
 SECTOR_MAP = {
-    "AAPL": "tech",     "MSFT": "tech",     "NVDA": "tech",
-    "AMZN": "consumer", "GOOGL": "tech",    "META": "tech",
-    "TSLA": "auto",     "JPM": "finance",   "V": "finance",
-    "UNH": "health",    "AMD": "tech",      "NFLX": "consumer",
+    # ETFs (each its own "sector" bucket so concurrency caps still apply sensibly)
+    "SPY": "index", "QQQ": "index", "IWM": "index", "DIA": "index",
+    "XLF": "etf-fin", "XLK": "etf-tech", "XLE": "etf-energy", "XLV": "etf-health",
+    "XLY": "etf-cons", "XLP": "etf-staples", "XLI": "etf-ind", "XLU": "etf-util",
+    "XLB": "etf-mat", "SMH": "etf-semi", "XBI": "etf-bio", "KRE": "etf-banks",
+    # stocks
+    "AAPL": "tech", "MSFT": "tech", "NVDA": "tech",
+    "AMZN": "consumer", "GOOGL": "tech", "META": "tech",
+    "TSLA": "auto", "JPM": "finance", "V": "finance",
+    "UNH": "health", "AMD": "tech", "NFLX": "consumer",
 }
 
 # --- Broker fees (sell-side) ---

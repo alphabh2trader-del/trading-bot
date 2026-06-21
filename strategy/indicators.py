@@ -14,6 +14,18 @@ def rsi(series: pd.Series, period: int = 14) -> pd.Series:
     return 100 - (100 / (1 + rs))
 
 
+def wilder_rsi(series: pd.Series, period: int = 2) -> pd.Series:
+    """RSI with Wilder's smoothing (EWM). Required for short-period Connors-style
+    mean-reversion signals (RSI-2); matches the research backtester."""
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+    avg_loss = loss.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+
 def macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> dict:
     fast_ema = ema(series, fast)
     slow_ema = ema(series, slow)

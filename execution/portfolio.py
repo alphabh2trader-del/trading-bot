@@ -16,6 +16,37 @@ def get_open_trades() -> list[dict]:
         return [r for r in csv.DictReader(f) if r.get("status") == "open"]
 
 
+def check_meanrev_exits() -> list[dict]:
+    """Rule-based exits for mean-reversion positions (no bracket TP). Closes a
+    position when the daily close rises back above SMA(exit), the disaster stop
+    is breached, or it has been held too long. Run from the daily routines."""
+    from datetime import datetime, timezone
+    from strategy.mean_reversion import should_exit
+    from execution.engine import close_paper_trade
+
+    closed = []
+    for trade in get_open_trades():
+        if "meanrev" not in (trade.get("notes", "").lower()):
+            continue
+        symbol = trade["symbol"]
+        daily = fetch_bars_safe(symbol, "1Day", timeout_sec=3.0)
+        try:
+            entered = datetime.fromisoformat(trade["timestamp"])
+            days_held = (datetime.now(timezone.utc).replace(tzinfo=None) - entered.replace(tzinfo=None)).days
+        except Exception:
+            days_held = 0
+
+        do_exit, reason = should_exit(daily, trade, days_held)
+        if not do_exit:
+            continue
+        exit_px = float(daily["close"].iloc[-1]) if daily is not None and not daily.empty \
+            else float(trade["entry_price"])
+        result = close_paper_trade(trade["trade_id"], exit_px, reason)
+        if result:
+            closed.append(result)
+    return closed
+
+
 def check_tp_sl_hits(timeframe: str = "1Day") -> list[dict]:
     """Sync open CSV trades with Alpaca — if a position is gone, Alpaca closed it via TP/SL."""
     open_trades = get_open_trades()

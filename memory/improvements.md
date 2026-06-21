@@ -45,3 +45,26 @@ All improvements are appended here. Never delete entries.
   DST caveat (winter `open` lands pre-market and skips) with recommended schedule fix.
 
 ---
+
+## 2026-06-21 — New profitable strategy: meanrev_rsi2_v1 (Connors RSI-2)
+
+- Researched documented swing strategies (Perplexity + literature) and built a research
+  backtester (`backtest/research.py`, yfinance, train/test split, costs). Tested the
+  Connors mean-reversion family vs a trend baseline; all held up out-of-sample.
+- Selected **Connors RSI-2** (long-only, daily): buy close>SMA200 & WilderRSI(2)<10;
+  exit close>SMA5 / -8% disaster stop / 10-day. OOS 2019-2024: 67.4% win, PF 1.29.
+- Integrated as the ACTIVE strategy (`strategy/mean_reversion.py`): wired into
+  `routines/analysis.py` (planning), `decision/validator.py` (skip price-zone/regime for
+  market entry), `execution/engine.py` (market entry, no bracket TP), and rule-based
+  exits via `execution/portfolio.check_meanrev_exits()` run in premarket/midday/afternoon.
+- Risk management (full redesign): 1% risk/trade vs 8% stop, **max 6 concurrent positions**
+  (up from 2), exposure cap 6%, 1/sector. Portfolio OOS: CAGR ~7.4%, max DD ~7.1% (under
+  the 8% mandate), Sharpe ~0.89 — chosen as the best return that stays prop-safe.
+- Universe expanded to 26 liquid ETFs + large caps (`config.BASE_WATCHLIST`).
+- Added `backtest/meanrev_report.py` (integrated backtest, writes memory/backtests/) and
+  `tests/test_meanrev.py`. Wilder RSI added to `strategy/indicators.py`. Strategy id ->
+  `meanrev_rsi2_v1`, version 2.0. Legacy trend scorer kept but inactive.
+- Realistic objective documented: ~0.6%/month (~7%/yr), ~$100,600 end-of-month on a
+  $100k paper account; +10%/month is not achievable within the 8% drawdown mandate.
+
+---

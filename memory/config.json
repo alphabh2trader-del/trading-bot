@@ -1,13 +1,13 @@
 {
   "system": {
     "mode": "paper",
-    "version": "1.0",
-    "strategy": "swing_core_v1",
+    "version": "2.0",
+    "strategy": "meanrev_rsi2_v1",
     "initialized": "2026-06-19"
   },
   "risk": {
     "risk_per_trade_pct": 1.0,
-    "max_open_trades": 2,
+    "max_open_trades": 6,
     "max_daily_loss_pct": 3.0,
     "max_total_drawdown_pct": 8.0,
     "target_rr_min": 1.5,
