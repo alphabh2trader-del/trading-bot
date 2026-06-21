@@ -187,3 +187,19 @@ Also refreshed stale docs (plan.py "top 2" -> "all qualifying", yml DST header, 
 automation table + DST note). 54 tests still green.
 
 ---
+
+## 2026-06-21 — Final audit: market regime was never computed (fixed)
+
+Final full-code verification before handing back. Found one real integration bug: no
+routine set state["regime"], so it defaulted to "NORMAL" forever. `validate_entry`
+compares the live SPY regime to the planned one, so whenever SPY was actually TREND/CHOP
+it rejected entries (TREND != NORMAL) — the swing sleeve would self-reject in exactly the
+trending markets it wants to trade. Fix: analysis.py computes get_regime(SPY) once and
+stores it (also enables the EXTREME block and the regime score bonus). 54 tests green.
+
+Verified net-of-fees backtests reproduce: trend 10.54% CAGR @0.30% cost; swing 46.1% win
+/ PF 1.22 / ~0.27%/mo @0.10% round-trip. Blended realistic ~0.5-0.7%/mo. Known caveat
+(not a crash): swing risk-based sizing with tight stops can create large notional vs the
+70% sleeve buying power — fine on a margin paper account, watch on a funded one.
+
+---

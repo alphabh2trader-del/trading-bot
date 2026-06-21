@@ -36,7 +36,17 @@ def run(state: dict) -> None:
     # ---------------------------------------------------------------- SWING sleeve
     if config.SWING_ENABLED:
         from data.universe import get_watchlist
-        regime = state.get("regime", "NORMAL")
+        from strategy.regime import get_regime
+
+        # Compute the market regime from SPY ONCE here and store it, so the whole day
+        # agrees on it: build_plan blocks on EXTREME and scores the regime bonus, and
+        # validate_entry (at execution) only rejects on a regime *change* since the plan.
+        # Without this, regime defaulted to NORMAL and the validator rejected entries
+        # whenever SPY was actually trending (TREND != NORMAL) — self-defeating.
+        spy_d1 = _fetch_daily("SPY")
+        regime = get_regime(spy_d1) if spy_d1 is not None else state.get("regime", "NORMAL")
+        state["regime"] = regime
+
         # Use premarket's liquidity-filtered list when available (falls back to
         # config.SWING_WATCHLIST if premarket didn't run, e.g. a manual analysis run).
         watchlist = get_watchlist(state)
