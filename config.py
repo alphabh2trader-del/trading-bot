@@ -61,9 +61,13 @@ MEANREV_STOP_PCT = 0.08
 MEANREV_MAX_HOLD = 10
 
 # --- Trend timing (Faber GTAA) — ACTIVE strategy ---
-TREND_SMA_MONTHS = 10       # hold ETF when monthly close > 10-month SMA
+# These are sourced from memory/config.json ("trend" section) so the self-improvement
+# loop (memory/adaptive.py) can adjust exposure for capital preservation and persist it.
+_TREND = _CFG.get("trend", {})
+TREND_SMA_MONTHS = int(_TREND.get("sma_months", 10))   # hold ETF when monthly close > N-month SMA
 TREND_SMA_DAYS = 200        # ~10 months, used for the minimum-history check
-TREND_EXPOSURE = 1.0        # 1.0 = full; <1 de-risk, >1 leverage (scales return AND drawdown)
+TREND_EXPOSURE = float(_TREND.get("exposure", 1.0))    # 1.0 = full; <1 de-risk, >1 leverage (scales return AND drawdown)
+TREND_BASE_EXPOSURE = float(_TREND.get("base_exposure", 1.0))  # the exposure to restore to after recovery
 
 # --- Universe ---
 # Trend timing trades a diversified ETF set: equity index/sector + bonds (TLT) + gold (GLD).

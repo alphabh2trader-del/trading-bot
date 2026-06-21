@@ -9,9 +9,22 @@
     "risk_per_trade_pct": 1.0,
     "max_open_trades": 6,
     "max_daily_loss_pct": 3.0,
-    "max_total_drawdown_pct": 8.0,
+    "max_total_drawdown_pct": 25.0,
+    "max_total_drawdown_pct_funded": 8.0,
     "target_rr_min": 1.5,
-    "target_rr_max": 2.0
+    "target_rr_max": 2.0,
+    "_comment_drawdown": "PAPER backstop = 25% (consistent with trend_timing_v1 @ 1.0x exposure, expected ~24% DD; user accepted this). For a FUNDED prop account, set max_total_drawdown_pct = max_total_drawdown_pct_funded (8.0) AND set trend.base_exposure = 0.33. The soft de-risk ladder in trend.* protects capital well before this catastrophe backstop trips."
+  },
+  "trend": {
+    "exposure": 1.0,
+    "base_exposure": 1.0,
+    "min_exposure": 0.33,
+    "sma_months": 10,
+    "soft_derisk_dd_pct": 12.0,
+    "deep_derisk_dd_pct": 18.0,
+    "restore_dd_pct": 6.0,
+    "derisk_ladder": [1.0, 0.66, 0.33],
+    "_comment": "Live-controllable trend-timing params. memory/adaptive.py lowers exposure one rung down the ladder for capital preservation when realised drawdown breaches soft/deep thresholds, and restores it after recovery. Every change is logged + sent to Telegram. sma_months robustness is re-validated monthly (flag-only, no auto-flip)."
   },
   "strategy": {
     "trend_ema": 200,

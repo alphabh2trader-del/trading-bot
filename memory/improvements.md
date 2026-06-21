@@ -92,3 +92,34 @@ All improvements are appended here. Never delete entries.
   drawdown up to ~24% accepted (paper). For a real funded account, redeploy at ~0.33×.
 
 ---
+
+## 2026-06-21 — Self-improvement loop reconnected to the ACTIVE strategy
+
+- **Bug found & fixed**: the learning loop (`memory/adaptive.py`) was tuning `score_threshold`
+  and `min_rr` — parameters of the RETIRED swing/meanrev strategies. The ACTIVE
+  `trend_timing_v1` uses NEITHER, so the bot's "learning" affected zero live trades. Worse,
+  its `win_rate < 45% → tighten` rule would mis-fire on trend following (which wins ~40-45%
+  by design). The loop is now **strategy-aware** (dispatches on `system.strategy`).
+- **New trend-timing learning** (capital preservation, not return-chasing): reads realised
+  account drawdown from `memory/equity_state.json` and walks `trend.exposure` DOWN a discrete
+  ladder [1.0, 0.66, 0.33] when drawdown breaches soft (12%) / deep (18%) thresholds, then
+  restores it one rung at a time after recovery (≤6%, with hysteresis to prevent flapping).
+  Exposure is the single risk dial, so this directly trades return for safety only when the
+  account is bleeding. Verified end-to-end: a simulated 14% drawdown de-risked 1.0×→0.66×.
+- **Telegram on EVERY change**: `_notify()` sends each adjustment (de-risk / restore / flag)
+  to Telegram, and every change is appended to `improvements.md` + `session_snapshots.jsonl`.
+- **Monthly structural robustness re-check** (deep/weekly run, once per calendar month):
+  re-runs a small SMA-lookback grid (`backtest.momentum.evaluate_lookback`) and FLAGS — via
+  Telegram, without auto-changing — if `trend.sma_months` drifts out of the robust cluster.
+  Structural params are never auto-flipped (that would be overfitting; see research_notes.md).
+- **Drawdown kill-switch reconciled**: account backstop was 8% while the chosen 1.0× exposure
+  has an expected ~24% drawdown — the bot would have self-locked on the first normal drawdown
+  and never learned. Set paper backstop to 25% (catastrophe-only); documented that a FUNDED
+  account must reset to `max_total_drawdown_pct_funded` (8%) AND `trend.base_exposure` 0.33×.
+- `config.py` now sources `TREND_EXPOSURE`/`TREND_SMA_MONTHS` from `memory/config.json` so the
+  loop's adjustments persist across CI runs (same mechanism as the monthly rebalance guard).
+- Added `tests/test_adaptive.py` (7 cases: de-risk/restore/hysteresis/no-data-safe/ladder).
+  Total suite 42 green. Overnight strategy research saved to `memory/research_notes.md`
+  (vol targeting + multi-lookback are the top candidates, gated on the `verify.py` bar).
+
+---

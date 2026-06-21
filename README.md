@@ -86,10 +86,29 @@ but it is profitable across all market regimes.
 | 09:35 | open | (no per-day entries under trend timing) |
 | 10:30 | midday | Position check |
 | 14:00 | afternoon | Position check |
-| 16:00 | review | EOD report + adaptive parameter learning |
-| Saturday 10:00 | weekly | Full weekly report sent to Telegram |
+| 16:00 | review | EOD report + **self-improvement loop** (see below) |
+| Saturday 10:00 | weekly | Full weekly report + **monthly robustness re-check** |
 
 All routines commit their output back to the repo so state persists between runs.
+
+---
+
+## Self-Improvement Loop (`memory/adaptive.py`)
+
+The bot adapts the **active** strategy between sessions — never during market hours:
+
+- **Daily (review)** — reads realised account drawdown and walks `trend.exposure` down a
+  discrete ladder (1.0× → 0.66× → 0.33×) when drawdown breaches 12% / 18%, then restores it
+  one rung at a time after recovery (with hysteresis). Pure capital preservation — it only
+  trades return for safety when the account is bleeding.
+- **Monthly (weekly run)** — re-runs an SMA-lookback grid and **flags** (via Telegram, no
+  auto-change) if the active lookback drifts out of its robust cluster. Structural parameters
+  are never auto-flipped — that would be overfitting.
+- **Every change** is logged to `improvements.md` + `session_snapshots.jsonl` **and sent to
+  Telegram**, so you see each adjustment as it happens.
+
+The loop is strategy-aware: it tunes the parameters the live strategy actually uses (it used
+to tune dead swing-strategy knobs — fixed 2026-06-21).
 
 ---
 

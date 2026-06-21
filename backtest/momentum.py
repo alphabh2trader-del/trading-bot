@@ -69,16 +69,16 @@ def momentum_rotation(close: pd.DataFrame, top_n=4, lookback=6, cost=0.001) -> p
     return pd.Series(equity, index=dates)
 
 
-def trend_timing(close: pd.DataFrame, cost=0.001) -> pd.Series:
-    """Monthly: equal-weight the ETFs whose close > 10-month SMA; rest in cash."""
+def trend_timing(close: pd.DataFrame, cost=0.001, sma_months=10) -> pd.Series:
+    """Monthly: equal-weight the ETFs whose close > N-month SMA; rest in cash."""
     monthly = close.resample("ME").last()
-    sma10 = monthly.rolling(10).mean()
+    sma = monthly.rolling(sma_months).mean()
     equity = [1.0]
-    dates = [monthly.index[10]]
+    dates = [monthly.index[sma_months]]
     prev = set()
-    for i in range(10, len(monthly) - 1):
+    for i in range(sma_months, len(monthly) - 1):
         d = monthly.index[i]
-        held = set([s for s in monthly.columns if monthly.loc[d, s] > sma10.loc[d, s]])
+        held = set([s for s in monthly.columns if monthly.loc[d, s] > sma.loc[d, s]])
         nxt = monthly.iloc[i + 1] / monthly.iloc[i] - 1
         ret = np.mean([nxt[s] for s in held]) if held else 0.0
         turnover = len(held.symmetric_difference(prev)) / max(len(monthly.columns), 1)
@@ -87,6 +87,18 @@ def trend_timing(close: pd.DataFrame, cost=0.001) -> pd.Series:
         dates.append(monthly.index[i + 1])
         prev = held
     return pd.Series(equity, index=dates)
+
+
+def evaluate_lookback(sma_months: int, years: int = 6, cost: float = 0.0020) -> dict:
+    """Backtest trend timing for one SMA lookback over the last `years` and return its
+    metrics dict (cagr/maxdd/sharpe/final). Used by the monthly robustness re-check in
+    memory/adaptive.py. Needs network (yfinance) — callers wrap in try/except."""
+    from datetime import date, timedelta
+    end = date.today()
+    start = end - timedelta(days=int(years * 365.25) + sma_months * 31 + 30)
+    close = load_closes(start.isoformat(), end.isoformat())
+    eq = trend_timing(close, cost=cost, sma_months=sma_months)
+    return _metrics(eq)
 
 
 def _period_table(equity: pd.Series, label: str):
