@@ -77,10 +77,10 @@ def calculate_score(
     atr_stop, _ = calculate_atr_stop(h4, direction, atr_multiplier=config.ATR_STOP_MULT)
     if direction == "long":
         sl = min(last_h4["low"] * 0.999, atr_stop)
-        tp = entry + (entry - sl) * 2.0
+        tp = entry + (entry - sl) * config.TP_R_MULT
     else:
         sl = max(last_h4["high"] * 1.001, atr_stop)
-        tp = entry - (sl - entry) * 2.0
+        tp = entry - (sl - entry) * config.TP_R_MULT
 
     risk = abs(entry - sl)
     reward = abs(tp - entry)
@@ -120,6 +120,8 @@ def calculate_score(
 
     # Volume confirmation (0–5) — via volume-analysis skill
     vol_signal = get_volume_signal(h4)
+    if config.REQUIRE_VOLUME_CONFIRM and not vol_signal["confirmed"]:
+        return None
     volume_score = config.VOLUME_CONFIRM_BONUS if vol_signal["confirmed"] else 0
 
     # R:R (0–15)

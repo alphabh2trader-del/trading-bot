@@ -62,3 +62,22 @@ EMA 200 on D1:
 Note: a backtest also exposed that the old `detect_structure` (strictly monotonic
 highs/lows) fired ~1 in 540 bars, so the strategy produced essentially no setups; it
 was replaced with a half-window higher-high/higher-low structure check (2026-06-21).
+
+### Parameter sweep — 2026-06-21 (`python -m backtest.sweep`)
+
+Swept take-profit (2.0/2.5/3.0 R) × volume-confirmation requirement (off/on) at
+threshold 65 on the 10-symbol watchlist (~540d H4). **Every combination stayed
+unprofitable** (PF 0.77–0.93, all expectancies negative). At each TP the win rate sat
+3–4 points BELOW that TP's breakeven (e.g. TP 2.0 needs 33.3%, got 30.4%; TP 3.0 needs
+25%, got 23.2%). Requiring volume confirmation hurt results; raising TP beyond 2R only
+shifts breakeven without the signal ever clearing it.
+
+**Diagnosis: the entry signal has no demonstrable edge** on this universe/period —
+tuning trade geometry or filters cannot fix that. Real improvement requires reworking
+the entry signal itself (different features, true SPY-regime gating in-sample, a
+different/curated universe, exit logic), which is signal research, not parameter tuning.
+Defaults kept spec-compliant (TP 2.0R, no hard volume filter); `TP_R_MULT` /
+`REQUIRE_VOLUME_CONFIRM` config knobs + `backtest/sweep.py` retained for future research.
+
+**Status: DO NOT trade live. Treat paper results as unvalidated until a reworked signal
+backtests with a positive edge (target win rate >50% at 2R, or PF > 1.3).**

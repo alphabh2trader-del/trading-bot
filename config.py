@@ -47,6 +47,10 @@ MIN_RR = 1.8                # hard floor — below this rr_score = 0
 ATR_STOP_MULT = 1.5         # ATR multiplier for the volatility buffer on stops
 EARNINGS_BUFFER_DAYS = 3    # block setups with earnings within N days
 VOLUME_CONFIRM_BONUS = 5    # score bonus when volume confirms the signal
+REQUIRE_VOLUME_CONFIRM = False  # if True, reject setups without volume confirmation
+
+# --- Trade geometry ---
+TP_R_MULT = 2.0             # take-profit distance as a multiple of risk (R)
 
 # --- Watchlist ---
 BASE_WATCHLIST = [
