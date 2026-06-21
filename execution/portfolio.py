@@ -57,6 +57,12 @@ def check_tp_sl_hits(timeframe: str = "1Day") -> list[dict]:
     closed = []
 
     for trade in open_trades:
+        # Trend-timing positions carry no bracket SL/TP — they exit via the monthly
+        # rebalance, not here. Skip them (also avoids float("") on empty levels).
+        if "trend" in (trade.get("notes", "").lower()) \
+                or not trade.get("stop_loss") or not trade.get("take_profit"):
+            continue
+
         symbol = trade["symbol"]
         if symbol in alpaca_symbols:
             continue  # position still open on Alpaca

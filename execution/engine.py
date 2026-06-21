@@ -100,48 +100,104 @@ def _log_trend_open(symbol: str, price: float, qty: float, weight: float, order_
     _append_trade(trade)
 
 
-def rebalance_portfolio(target_weights: dict) -> dict:
-    """Monthly trend-timing rebalance: liquidate holdings that left the uptrend,
-    open equal-weight positions in ETFs that entered it. Existing in-trend holdings
-    are kept (lower turnover/cost)."""
+def rebalance_portfolio(target_weights: dict, protect: set | None = None) -> dict:
+    """Monthly trend-timing rebalance to target weights.
+
+    For every symbol in (target ∪ currently held) we compare the CURRENT position
+    (Alpaca is the source of truth) to its target dollar value (equity × weight):
+      - target 0 & held  -> SELL to cash (a trend broke down) ... UNLESS protected
+      - not held & target -> BUY the target quantity (newly entered an uptrend)
+      - held & target     -> RESIZE toward the target weight, but only when the
+        drift exceeds REBALANCE_BAND (avoids churn on small price drifts). This is
+        what makes an EXPOSURE change (e.g. the adaptive de-risk 1.0x->0.66x) actually
+        trim existing holdings, and keeps the book equal-weight over time.
+
+    `protect` = symbols whose data could not be fetched this run; they are NEVER sold
+    (we can't tell if they're still in trend), preventing a data outage from
+    liquidating the book.
+    """
     from src.execution.alpaca_bridge import get_account, get_positions, submit_market_order, close_position
 
+    protect = protect or set()
+    band = float(getattr(config, "REBALANCE_BAND", 0.15))
     equity = get_account()["equity"]
-    held = {p["symbol"] for p in get_positions()}
-    actions = {"bought": [], "sold": [], "held": []}
+    positions = {p["symbol"]: p for p in get_positions()}
+    actions = {"bought": [], "sold": [], "resized": [], "held": [], "protected": []}
 
-    # 1. Sell what is no longer in the target (trend broke down)
-    for symbol in list(held):
-        if symbol in target_weights:
-            actions["held"].append(symbol)
-            continue
-        try:
-            close_position(symbol)
-        except Exception:
-            pass
-        for t in get_open_trades_by_symbol(symbol):
-            close_paper_trade(t["trade_id"], _price(symbol), "trend exit (below 10m SMA)")
-        actions["sold"].append(symbol)
+    for symbol in sorted(set(target_weights) | set(positions)):
+        weight = float(target_weights.get(symbol, 0.0))
+        pos = positions.get(symbol)
+        cur_qty = float(pos["qty"]) if pos else 0.0
+        cur_val = float(pos["market_value"]) if pos else 0.0
 
-    # 2. Buy ETFs that newly entered an uptrend, at their target weight
-    for symbol, weight in target_weights.items():
-        if symbol in held:
+        # --- Exit: no longer in the target ---
+        if weight <= 0:
+            if cur_qty <= 0:
+                continue
+            if symbol in protect:
+                actions["protected"].append(symbol)  # data unknown -> keep, don't liquidate
+                continue
+            try:
+                close_position(symbol)
+            except Exception:
+                pass
+            for t in get_open_trades_by_symbol(symbol):
+                close_paper_trade(t["trade_id"], _price(symbol), "trend exit (below SMA)")
+            actions["sold"].append(symbol)
             continue
+
         price = _price(symbol)
         if price <= 0:
+            if cur_qty > 0:
+                actions["held"].append(symbol)
             continue
-        qty = round((equity * weight) / price, 4)
-        if qty <= 0:
+        target_val = equity * weight
+        target_qty = round(target_val / price, 4)
+
+        # --- New entry ---
+        if cur_qty <= 0:
+            if target_qty <= 0:
+                continue
+            try:
+                order = submit_market_order(symbol, target_qty, "long")
+                order_id = order["order_id"]
+            except Exception as e:
+                order_id = f"ERROR:{e}"
+            _log_trend_open(symbol, price, target_qty, weight, order_id)
+            actions["bought"].append(symbol)
             continue
-        try:
-            order = submit_market_order(symbol, qty, "long")
-            order_id = order["order_id"]
-        except Exception as e:
-            order_id = f"ERROR:{e}"
-        _log_trend_open(symbol, price, qty, weight, order_id)
-        actions["bought"].append(symbol)
+
+        # --- Held & in target: resize toward weight only if drift exceeds the band ---
+        drift = abs(target_val - cur_val) / target_val if target_val > 0 else 0.0
+        delta_qty = round(target_qty - cur_qty, 4)
+        if drift > band and abs(delta_qty) > 0:
+            side = "long" if delta_qty > 0 else "sell"   # "sell" trims the existing long
+            try:
+                submit_market_order(symbol, abs(delta_qty), side)
+            except Exception:
+                pass
+            _resize_trend_position(symbol, target_qty, weight)
+            actions["resized"].append(symbol)
+        else:
+            actions["held"].append(symbol)
 
     return actions
+
+
+def _resize_trend_position(symbol: str, new_qty: float, weight: float) -> None:
+    """Update the open trend CSV row(s) for `symbol` to the new share count after a
+    resize. Alpaca remains the source of truth for the live position; this keeps the
+    local trade log consistent (one open row per held symbol)."""
+    trades = _load_all_trades()
+    touched = False
+    for t in trades:
+        if t.get("symbol") == symbol and t.get("status") == "open":
+            t["position_size"] = new_qty
+            t["risk_pct"] = round(weight * 100, 2)
+            t["notes"] = f"{t.get('notes', '')} | resized to {new_qty}"
+            touched = True
+    if touched:
+        _save_all_trades(trades)
 
 
 def get_open_trades_by_symbol(symbol: str) -> list[dict]:

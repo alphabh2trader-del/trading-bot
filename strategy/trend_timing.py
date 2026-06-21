@@ -54,19 +54,45 @@ def _qualifies(daily: pd.DataFrame) -> bool:
     return bool(monthly.iloc[-1] > sma.iloc[-1])
 
 
-def target_portfolio(universe: list[str], fetch_daily, exposure: float = None) -> dict:
-    """Return {symbol: target_weight} for the ETFs currently in an uptrend,
-    equal-weighted and scaled by EXPOSURE. Empty dict means 'all cash'."""
+def _scan_universe(universe: list[str], fetch_daily, exposure: float = None):
+    """Single pass over the universe.
+
+    Returns (weights, failed) where:
+      - weights: {symbol: target_weight} for ETFs currently in an uptrend,
+        equal-weighted and scaled by EXPOSURE. Empty means 'all cash'.
+      - failed:  symbols whose data could NOT be fetched (timeout/exception).
+        These are UNKNOWN, not bearish — callers must not treat them as exits.
+    """
     exp = config.TREND_EXPOSURE if exposure is None else exposure
-    held = []
+    held: list[str] = []
+    failed: list[str] = []
     for symbol in universe:
         try:
             daily = fetch_daily(symbol)
         except Exception:
             daily = None
+        if daily is None:
+            # Could not evaluate this symbol (data hiccup) — flag it, don't drop it.
+            failed.append(symbol)
+            continue
         if _qualifies(daily):
             held.append(symbol)
-    if not held:
-        return {}
-    weight = exp / len(held)
-    return {symbol: round(weight, 4) for symbol in held}
+    weights: dict = {}
+    if held:
+        weight = exp / len(held)
+        weights = {symbol: round(weight, 4) for symbol in held}
+    return weights, failed
+
+
+def target_portfolio(universe: list[str], fetch_daily, exposure: float = None) -> dict:
+    """Return {symbol: target_weight} for the ETFs currently in an uptrend,
+    equal-weighted and scaled by EXPOSURE. Empty dict means 'all cash'."""
+    weights, _ = _scan_universe(universe, fetch_daily, exposure)
+    return weights
+
+
+def target_portfolio_status(universe: list[str], fetch_daily, exposure: float = None):
+    """Like target_portfolio but also returns the list of symbols whose data could
+    not be fetched, so the rebalance can abort/protect instead of liquidating on a
+    transient data outage. Returns (weights, failed)."""
+    return _scan_universe(universe, fetch_daily, exposure)

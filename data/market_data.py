@@ -53,9 +53,10 @@ def fetch_bars(symbol: str, timeframe: str, lookback_days: int = 365) -> pd.Data
     return df
 
 
-def fetch_bars_safe(symbol: str, timeframe: str, timeout_sec: float = 1.0) -> pd.DataFrame | None:
+def fetch_bars_safe(symbol: str, timeframe: str, timeout_sec: float = 1.0,
+                    lookback_days: int = 365) -> pd.DataFrame | None:
     with ThreadPoolExecutor(max_workers=1) as ex:
-        future = ex.submit(fetch_bars, symbol, timeframe)
+        future = ex.submit(fetch_bars, symbol, timeframe, lookback_days)
         try:
             return future.result(timeout=timeout_sec)
         except (FuturesTimeout, Exception):

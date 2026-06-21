@@ -68,6 +68,10 @@ TREND_SMA_MONTHS = int(_TREND.get("sma_months", 10))   # hold ETF when monthly c
 TREND_SMA_DAYS = 200        # ~10 months, used for the minimum-history check
 TREND_EXPOSURE = float(_TREND.get("exposure", 1.0))    # 1.0 = full; <1 de-risk, >1 leverage (scales return AND drawdown)
 TREND_BASE_EXPOSURE = float(_TREND.get("base_exposure", 1.0))  # the exposure to restore to after recovery
+# Rebalance band: a held position is only re-traded toward its target weight when it
+# drifts more than this fraction away. Keeps the book ~equal-weight and lets an
+# exposure change (adaptive de-risk) actually trim positions, without churning on noise.
+REBALANCE_BAND = float(_TREND.get("rebalance_band", 0.15))
 
 # --- Universe ---
 # Trend timing trades a diversified ETF set: equity index/sector + bonds (TLT) + gold (GLD).

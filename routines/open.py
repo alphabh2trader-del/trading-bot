@@ -34,6 +34,14 @@ def run(state: dict) -> None:
         send_message("OPEN: Sentiment block active — no entries today.")
         return
 
+    # Trend timing has no per-day entries (rebalance is monthly, via `analysis`).
+    # Return before the 5-min wait when there is nothing to execute — saves CI time
+    # and avoids needless work on every trading day.
+    setups = state.get("setups", [])
+    if not setups:
+        send_message("OPEN: No setups to execute (trend timing trades monthly via rebalance).")
+        return
+
     # Wait 5 min after open
     time.sleep(config.OPEN_WAIT_MINUTES * 60)
 
@@ -42,11 +50,6 @@ def run(state: dict) -> None:
     for t in closed:
         send_exit_alert(t)
         update_drawdown(state)
-
-    setups = state.get("setups", [])
-    if not setups:
-        send_message("OPEN: No confirmed setups to execute.")
-        return
 
     threshold = config.MIDDAY_SCORE_THRESHOLD if _is_midday() else config.SCORE_THRESHOLD
     executed = 0

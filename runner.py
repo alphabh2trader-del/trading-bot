@@ -39,7 +39,10 @@ def main() -> None:
         return
 
     state = load_state()
-    check_risk(state)  # exits immediately if kill switch LOCKED or drawdown >= 2%
+    # Exits immediately if the kill switch is LOCKED, the daily loss limit
+    # (MAX_DRAWDOWN_PCT) is hit, or the account total drawdown crosses
+    # MAX_TOTAL_DRAWDOWN_PCT.
+    check_risk(state)
 
     module = importlib.import_module(ROUTINES[args.routine])
     module.run(state)

@@ -3,12 +3,14 @@
 # Times are in UTC. GitHub Actions cron is UTC-only (no timezone/DST support).
 # ET offset: EDT = UTC-4 (summer), EST = UTC-5 (winter).
 #
-# ⚠ DST CAVEAT (action required twice a year):
-# These crons are set for EDT (summer). In winter (EST, ~Nov–Mar) every routine
-# fires 1 hour EARLIER in ET than intended. This matters most for `open`
-# (13:35 UTC = 08:35 ET in winter): the market is not open yet, `is_market_open()`
-# returns False, and NO entries are taken all winter. The `_is_midday()` threshold
-# switch is DST-safe (uses pytz), but the SCHEDULE is not.
+# DST note (mostly MOOT for the ACTIVE trend_timing_v1 strategy):
+# These crons are set for EDT (summer); in winter (EST, ~Nov–Mar) every routine
+# fires 1 hour EARLIER in ET. For trend timing this does NOT matter: the only
+# trading action is the monthly rebalance in `analysis` (08:00 ET), which submits
+# DAY market orders that Alpaca queues for the next open regardless of the exact
+# minute. `open` takes no per-day entries under trend timing, so the old winter
+# "no entries" problem no longer applies. The `_is_midday()` switch is DST-safe (pytz).
+# (Kept for reference in case a per-day intraday strategy is ever reactivated.)
 #
 # Fix options:
 #   (a) In winter, add 1h to the hour of each market-hours cron below AND its
@@ -107,8 +109,14 @@ jobs:
           git config user.name "trading-bot"
           git config user.email "bot@trading"
           git add memory/
-          git diff --cached --quiet || git commit -m "chore: premarket memory update $(date -u +%Y-%m-%dT%H:%M)"
-          git push
+          if git diff --cached --quiet; then echo "No memory changes"; exit 0; fi
+          git commit -m "chore: premarket memory update $(date -u +%Y-%m-%dT%H:%M)"
+          for i in 1 2 3; do
+            git push && break
+            echo "push rejected — rebasing on origin/main and retrying ($i)"
+            git pull --rebase --autostash origin main || true
+            sleep 3
+          done
 
   # ---------- analysis ----------
   analysis:
@@ -155,8 +163,14 @@ jobs:
           git config user.name "trading-bot"
           git config user.email "bot@trading"
           git add memory/
-          git diff --cached --quiet || git commit -m "chore: analysis memory update $(date -u +%Y-%m-%dT%H:%M)"
-          git push
+          if git diff --cached --quiet; then echo "No memory changes"; exit 0; fi
+          git commit -m "chore: analysis memory update $(date -u +%Y-%m-%dT%H:%M)"
+          for i in 1 2 3; do
+            git push && break
+            echo "push rejected — rebasing on origin/main and retrying ($i)"
+            git pull --rebase --autostash origin main || true
+            sleep 3
+          done
 
   # ---------- plan ----------
   plan:
@@ -203,8 +217,14 @@ jobs:
           git config user.name "trading-bot"
           git config user.email "bot@trading"
           git add memory/
-          git diff --cached --quiet || git commit -m "chore: plan memory update $(date -u +%Y-%m-%dT%H:%M)"
-          git push
+          if git diff --cached --quiet; then echo "No memory changes"; exit 0; fi
+          git commit -m "chore: plan memory update $(date -u +%Y-%m-%dT%H:%M)"
+          for i in 1 2 3; do
+            git push && break
+            echo "push rejected — rebasing on origin/main and retrying ($i)"
+            git pull --rebase --autostash origin main || true
+            sleep 3
+          done
 
   # ---------- open ----------
   open:
@@ -251,8 +271,14 @@ jobs:
           git config user.name "trading-bot"
           git config user.email "bot@trading"
           git add memory/
-          git diff --cached --quiet || git commit -m "chore: open memory update $(date -u +%Y-%m-%dT%H:%M)"
-          git push
+          if git diff --cached --quiet; then echo "No memory changes"; exit 0; fi
+          git commit -m "chore: open memory update $(date -u +%Y-%m-%dT%H:%M)"
+          for i in 1 2 3; do
+            git push && break
+            echo "push rejected — rebasing on origin/main and retrying ($i)"
+            git pull --rebase --autostash origin main || true
+            sleep 3
+          done
 
   # ---------- midday ----------
   midday:
@@ -299,8 +325,14 @@ jobs:
           git config user.name "trading-bot"
           git config user.email "bot@trading"
           git add memory/
-          git diff --cached --quiet || git commit -m "chore: midday memory update $(date -u +%Y-%m-%dT%H:%M)"
-          git push
+          if git diff --cached --quiet; then echo "No memory changes"; exit 0; fi
+          git commit -m "chore: midday memory update $(date -u +%Y-%m-%dT%H:%M)"
+          for i in 1 2 3; do
+            git push && break
+            echo "push rejected — rebasing on origin/main and retrying ($i)"
+            git pull --rebase --autostash origin main || true
+            sleep 3
+          done
 
   # ---------- afternoon ----------
   afternoon:
@@ -347,8 +379,14 @@ jobs:
           git config user.name "trading-bot"
           git config user.email "bot@trading"
           git add memory/
-          git diff --cached --quiet || git commit -m "chore: afternoon memory update $(date -u +%Y-%m-%dT%H:%M)"
-          git push
+          if git diff --cached --quiet; then echo "No memory changes"; exit 0; fi
+          git commit -m "chore: afternoon memory update $(date -u +%Y-%m-%dT%H:%M)"
+          for i in 1 2 3; do
+            git push && break
+            echo "push rejected — rebasing on origin/main and retrying ($i)"
+            git pull --rebase --autostash origin main || true
+            sleep 3
+          done
 
   # ---------- review (EOD — learning + adaptive adjustment) ----------
   review:
@@ -395,8 +433,14 @@ jobs:
           git config user.name "trading-bot"
           git config user.email "bot@trading"
           git add memory/
-          git diff --cached --quiet || git commit -m "chore: review + adaptive update $(date -u +%Y-%m-%dT%H:%M)"
-          git push
+          if git diff --cached --quiet; then echo "No memory changes"; exit 0; fi
+          git commit -m "chore: review + adaptive update $(date -u +%Y-%m-%dT%H:%M)"
+          for i in 1 2 3; do
+            git push && break
+            echo "push rejected — rebasing on origin/main and retrying ($i)"
+            git pull --rebase --autostash origin main || true
+            sleep 3
+          done
 
   # ---------- weekly (deep adaptive analysis) ----------
   weekly:
@@ -443,8 +487,14 @@ jobs:
           git config user.name "trading-bot"
           git config user.email "bot@trading"
           git add memory/
-          git diff --cached --quiet || git commit -m "chore: weekly deep-adaptive update $(date -u +%Y-%m-%dT%H:%M)"
-          git push
+          if git diff --cached --quiet; then echo "No memory changes"; exit 0; fi
+          git commit -m "chore: weekly deep-adaptive update $(date -u +%Y-%m-%dT%H:%M)"
+          for i in 1 2 3; do
+            git push && break
+            echo "push rejected — rebasing on origin/main and retrying ($i)"
+            git pull --rebase --autostash origin main || true
+            sleep 3
+          done
 
   # ---------- manual reset ----------
   reset:
@@ -488,5 +538,11 @@ jobs:
           git config user.name "trading-bot"
           git config user.email "bot@trading"
           git add memory/
-          git diff --cached --quiet || git commit -m "chore: kill switch reset $(date -u +%Y-%m-%dT%H:%M)"
-          git push
+          if git diff --cached --quiet; then echo "No memory changes"; exit 0; fi
+          git commit -m "chore: kill switch reset $(date -u +%Y-%m-%dT%H:%M)"
+          for i in 1 2 3; do
+            git push && break
+            echo "push rejected — rebasing on origin/main and retrying ($i)"
+            git pull --rebase --autostash origin main || true
+            sleep 3
+          done
