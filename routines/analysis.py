@@ -35,8 +35,12 @@ def _fetch_daily(symbol: str):
 def run(state: dict) -> None:
     # ---------------------------------------------------------------- SWING sleeve
     if config.SWING_ENABLED:
+        from data.universe import get_watchlist
         regime = state.get("regime", "NORMAL")
-        setups = build_plan(config.SWING_WATCHLIST, regime)
+        # Use premarket's liquidity-filtered list when available (falls back to
+        # config.SWING_WATCHLIST if premarket didn't run, e.g. a manual analysis run).
+        watchlist = get_watchlist(state)
+        setups = build_plan(watchlist, regime)
         state["setups"] = setups_to_dict(setups)
         if setups:
             top = setups[0]

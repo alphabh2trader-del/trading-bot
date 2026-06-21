@@ -276,8 +276,8 @@ All routines run via GitHub Actions on a UTC cron and commit `memory/` back to t
 |---|---|---|
 | 07:00 | premarket | Health check, overnight exits, news/sentiment flags |
 | 08:00 | analysis | **Swing plan (daily)** — scan stocks for setups; **+ trend rebalance** once per month |
-| 09:00 | plan | Plan checkpoint |
-| 09:35 | open | **Execute swing entries** after the 5-min wait (gated by the risk budget) |
+| 09:00 | plan | Plan checkpoint — confirms the day's swing setups, arms the bot |
+| 09:35 | open | **Execute swing entries** after the 5-min wait (gated by the risk budget). Two UTC crons (13:35 + 14:35) so it lands at 09:35 ET in both EDT and EST — see DST note. |
 | 10:30 | midday | Position check + TP/SL exits |
 | 14:00 | afternoon | Position check + TP/SL exits (positions held overnight — swing, no force-close) |
 | 16:00 | review | EOD report + **self-improvement loop** (daily) |
@@ -289,10 +289,12 @@ loses an update). The committed files — `daily_plan.json`, `trend_state.json`,
 `equity_state.json`, `config.json`, `trades.csv`, `session_snapshots.jsonl` — are read back on
 the next run. **None of these are gitignored.**
 
-> **DST:** crons are UTC and set for EDT. For trend timing this is harmless — the monthly
-> rebalance submits DAY market orders that Alpaca queues for the next open regardless of the
-> exact minute, and `open` takes no per-day entries. See the header of
-> [`trading_routines.yml`](.github/workflows/trading_routines.yml).
+> **DST:** crons are UTC. The entry routine **`open` runs on two crons (13:35 + 14:35 UTC)**
+> so the real entry always lands at **09:35 ET in both seasons** — in summer the 13:35 run
+> executes and marks setups `EXECUTED` (so the 14:35 run is a no-op); in winter the 13:35 run
+> hits a closed market and returns, and the 14:35 run executes. No double-entry. The other
+> market-hours routines are idempotent exit-checks/reports, so a ~1h seasonal shift is harmless.
+> See the header of [`trading_routines.yml`](.github/workflows/trading_routines.yml).
 
 ---
 

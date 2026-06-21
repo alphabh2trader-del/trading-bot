@@ -1,4 +1,4 @@
-"""PLAN — 09:00 ET: confirm top 2 setups, arm the bot."""
+"""PLAN — 09:00 ET: confirm the day's swing setups (all that qualified), arm the bot."""
 from reporting.telegram import send_message
 
 

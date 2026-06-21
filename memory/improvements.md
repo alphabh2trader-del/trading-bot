@@ -169,3 +169,21 @@ the bot on noise. Fix:
   'adaptive' section invented. Tests: +3 (54 green). README self-improvement section rewritten.
 
 ---
+
+## 2026-06-21 — Routines made coherent with the daily swing sleeve
+
+Audited every routine + the CI workflow now that the swing sleeve trades on a fixed
+daily schedule (it didn't matter under the monthly-only trend bot). Two real fixes:
+
+- **DST / winter entries (was a silent bug):** `open` ran only at 13:35 UTC = 09:35 EDT,
+  which in winter (EST) is 08:35 ET — market CLOSED → no swing entries all winter. Added a
+  second cron at 14:35 UTC; the existing status=EXECUTED guard (persisted via git) prevents
+  any double-entry. Real entry now lands at 09:35 ET year-round with the base threshold.
+- **Watchlist wiring:** `analysis` used config.SWING_WATCHLIST directly, ignoring the
+  liquidity-filtered list premarket builds into state["watchlist"]. Now it calls
+  data.universe.get_watchlist(state) (falls back to SWING_WATCHLIST on manual runs).
+
+Also refreshed stale docs (plan.py "top 2" -> "all qualifying", yml DST header, README
+automation table + DST note). 54 tests still green.
+
+---

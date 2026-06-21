@@ -3,22 +3,19 @@
 # Times are in UTC. GitHub Actions cron is UTC-only (no timezone/DST support).
 # ET offset: EDT = UTC-4 (summer), EST = UTC-5 (winter).
 #
-# DST note (mostly MOOT for the ACTIVE trend_timing_v1 strategy):
-# These crons are set for EDT (summer); in winter (EST, ~Nov–Mar) every routine
-# fires 1 hour EARLIER in ET. For trend timing this does NOT matter: the only
-# trading action is the monthly rebalance in `analysis` (08:00 ET), which submits
-# DAY market orders that Alpaca queues for the next open regardless of the exact
-# minute. `open` takes no per-day entries under trend timing, so the old winter
-# "no entries" problem no longer applies. The `_is_midday()` switch is DST-safe (pytz).
-# (Kept for reference in case a per-day intraday strategy is ever reactivated.)
+# DST handling (MATTERS now — the swing sleeve takes daily entries at a fixed time):
+# Crons are UTC. The entry routine `open` must land INSIDE market hours in BOTH seasons:
+#   EDT (summer): 09:35 ET = 13:35 UTC      EST (winter): 09:35 ET = 14:35 UTC
+# So `open` has TWO crons (13:35 and 14:35 UTC). This does NOT double-enter: in summer the
+# 13:35 run executes and marks each setup status=EXECUTED (persisted in daily_plan.json via
+# git), so the 14:35 run finds them already executed and is a no-op; in winter the 13:35 run
+# hits a CLOSED market (08:35 ET) and returns early, and the 14:35 run (09:35 EST) executes.
+# Net: the real entry always happens at 09:35 ET with the base score threshold, year-round.
 #
-# Fix options:
-#   (a) In winter, add 1h to the hour of each market-hours cron below AND its
-#       matching `startsWith(github.event.schedule, ...)` condition; revert in spring, OR
-#   (b) Move the market-hours routines (analysis/plan/open/midday/afternoon/review)
-#       into the EST/EDT overlap window 14:30–20:00 UTC so they always land inside
-#       market hours year-round (entry time then shifts ~1h seasonally, acceptable
-#       for a swing strategy). premarket (07:00 ET) is pre-open and fine in both.
+# The other market-hours routines are exit-checks/reports and are idempotent (closing an
+# already-closed position is a no-op), so a ~1h seasonal shift is harmless. `analysis`/`plan`
+# are pre-open planning; the monthly trend rebalance queues DAY orders for the next open.
+# The `_is_midday()` switch in open.py is DST-safe (pytz US/Eastern).
 #
 # Each job: checkout → setup Python → install deps → run routine → commit memory/ back to repo.
 # Committing memory/ ensures the bot's state (trades, config, snapshots) persists across runs.
@@ -33,8 +30,9 @@ on:
     - cron: "0 12 * * 1-5"
     # plan        09:00 ET → 13:00 UTC
     - cron: "0 13 * * 1-5"
-    # open        09:35 ET → 13:35 UTC
+    # open        09:35 ET → 13:35 UTC (EDT/summer) AND 14:35 UTC (EST/winter)
     - cron: "35 13 * * 1-5"
+    - cron: "35 14 * * 1-5"
     # midday      10:30 ET → 14:30 UTC
     - cron: "30 14 * * 1-5"
     # afternoon   14:00 ET → 18:00 UTC
@@ -228,7 +226,7 @@ jobs:
 
   # ---------- open ----------
   open:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.routine == 'open' || github.event_name == 'schedule' && startsWith(github.event.schedule, '35 13')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.routine == 'open' || github.event_name == 'schedule' && (startsWith(github.event.schedule, '35 13') || startsWith(github.event.schedule, '35 14'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
