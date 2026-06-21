@@ -25,8 +25,8 @@ memory lives in git.
 
 1. [What It Does](#what-it-does)
 2. [Architecture & Data Flow](#architecture--data-flow)
-3. [Strategy — `trend_timing_v1`](#strategy--trend_timing_v1-faber-gtaa-trend-timing)
-4. [Backtest](#backtest--stress-tested)
+3. [Strategy — `dual_swing+trend_v1`](#strategy--dual_swingtrend_v1)
+4. [Backtest](#backtest--both-sleeves-net-of-fees)
 5. [Risk Model (layered)](#risk-model-layered)
 6. [Self-Improvement Loop](#self-improvement-loop-memoryadaptivepy)
 7. [Rebalance Safety Mechanics](#rebalance-safety-mechanics)
@@ -188,22 +188,30 @@ loads them at import. There is no second place to change a limit.
 
 ## Self-Improvement Loop (`memory/adaptive.py`)
 
-The bot adapts the **active** strategy between sessions — **never during market hours**.
-It is *strategy-aware*: it tunes the parameters the live strategy actually uses.
+Runs between sessions — **never during market hours**. The guiding rule: **the loop is
+allowed to reduce RISK on its own, but never to change the strategy on its own.** This is
+deliberate — auto-tuning entry/exit parameters on a handful of noisy trades is the classic
+way a "self-improving" bot quietly destroys its own edge, so we don't do it.
 
-- **Daily (review, 16:00 ET)** — reads realised account drawdown from `equity_state.json`
-  and walks `trend.exposure` **down** a discrete ladder (1.0× → 0.66× → 0.33×) when drawdown
-  breaches **12% / 18%**, then restores it **one rung at a time** after recovery (≤6%, with
-  hysteresis so it doesn't flap). Pure capital preservation — it only trades return for
-  safety when the account is bleeding. The trim takes effect at the next monthly rebalance
-  (the 25% kill-switch is the immediate catastrophe stop).
-- **Monthly (weekly run, deep)** — re-runs an SMA-lookback grid and **flags** (Telegram, no
-  auto-change) if the active 10-month lookback drifts out of its robust cluster. Structural
-  parameters are **never auto-flipped** — that would be overfitting.
-- **Every change** is logged to `improvements.md` + `session_snapshots.jsonl` **and sent to
-  Telegram**, so you see each adjustment as it happens.
+What it **does automatically** (capital preservation only):
 
-Covered by `tests/test_adaptive.py` (de-risk / restore / hysteresis / no-data-safe / ladder).
+- **Trend exposure de-risk** — reads realised account drawdown from `equity_state.json` and
+  walks the trend sleeve's `exposure` **down** a ladder (1.0× → 0.66× → 0.33×) when drawdown
+  breaches **12% / 18%**, restoring it **one rung at a time** after recovery (≤6%, hysteresis
+  so it doesn't flap). It only trades return for safety when the account is bleeding.
+
+What it **only alerts on** (never changes):
+
+- **Swing performance** — analyses the swing **trade history** (read-only; `trades.csv` is
+  never modified or pruned, so it stays available for your own analysis) and, **only on a
+  meaningful sample (≥25 closed trades)**, sends a Telegram **alert** if rolling win rate
+  < 40% or profit factor < 1.0. It changes **nothing** — you decide whether to adjust.
+- **Monthly SMA robustness** — re-runs an SMA-lookback grid and **flags** drift of the active
+  10-month lookback out of its robust cluster. Structural parameters are never auto-flipped.
+
+Every automatic change (only ever a risk reduction) is logged to `improvements.md` +
+`session_snapshots.jsonl` **and sent to Telegram**. Covered by `tests/test_adaptive.py`
+(de-risk / restore / hysteresis / dual capital-preservation / swing alert-only / small-sample).
 
 ---
 
@@ -237,7 +245,7 @@ Covered by `tests/test_rebalance.py` (new entries / resize / band / exit / prote
 | Market sentiment / news | [Perplexity AI](https://www.perplexity.ai) (`sonar`) |
 | Notifications | Telegram Bot API |
 | Scheduling | GitHub Actions (cron, UTC) |
-| Tests | pytest (51 tests) |
+| Tests | pytest (54 tests) |
 | Language | Python 3.11 |
 
 ---
@@ -313,7 +321,7 @@ memory/                    Persistent state + logs (committed each run)
 backtest/                  swing.py (swing sleeve), momentum.py (trend sleeve), verify.py (RSI-2)
 reporting/                 Telegram, EOD + weekly reports
 src/                       Skills (ATR/volume/earnings) + alpaca_bridge (used in prod)
-tests/                     pytest suite (51 tests)
+tests/                     pytest suite (54 tests)
 .github/workflows/         trading_routines.yml (8 scheduled jobs + manual reset)
 ```
 
@@ -371,7 +379,7 @@ Telegram prints to the console instead of sending).
 ## Testing
 
 ```bash
-python -m pytest -q          # 51 tests
+python -m pytest -q          # 54 tests
 python -m backtest.swing     # swing-sleeve backtest, net of fees (writes memory/backtests/)
 python -m backtest.momentum  # trend-sleeve backtest (writes memory/backtests/)
 python -m backtest.verify    # RSI-2 stress test (why mean reversion was retired)

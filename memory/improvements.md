@@ -149,3 +149,23 @@ User goal: more activity / "profit on the spot," not just the slow monthly trend
   README + memory/strategy.md rewritten for the dual system. config version 3.0 → 4.0.
 
 ---
+
+## 2026-06-21 — Self-improvement loop made CONSERVATIVE (dual-aware)
+
+User flagged a real risk: could the self-improvement loop harm the bot? After the pivot it
+DID — the dispatcher only knew "trend_timing_v1", so "dual_swing+trend_v1" fell through to
+the LEGACY path, which (a) dropped the trend-sleeve exposure protection and (b) auto-tuned
+swing score_threshold on 10-trade samples. For a ~46%-win strategy that ratchet would choke
+the bot on noise. Fix:
+
+- New `_run_dual_adaptive`: the ONLY automatic action is capital preservation (trend
+  exposure de-risk on drawdown — `_apply_trend_exposure_control`, factored out and shared).
+- Swing performance is now ALERT-ONLY (`_swing_performance_flag`): reads trade history
+  (read-only; trades.csv never pruned, stays available for analysis), and ONLY on >=25
+  closed swing trades sends a Telegram alert if win rate <40% or PF <1.0. It writes ZERO
+  strategy parameters — the loop can reduce risk on its own but can never tune away the edge.
+- Dispatcher routes dual_swing+trend_v1 -> dual path. Verified end-to-end: 14% DD -> exposure
+  1.0x->0.66x (1 config write), degraded swing sample -> alert sent, 0 config writes, no
+  'adaptive' section invented. Tests: +3 (54 green). README self-improvement section rewritten.
+
+---

@@ -1,24 +1,27 @@
 """Adaptive self-improvement — runs after EOD review (daily) and weekly (deep).
 
-This is the bot's learning loop. It is STRATEGY-AWARE: it dispatches on the active
-strategy in memory/config.json and adjusts the parameters that strategy actually uses.
+This is the bot's learning loop. It is STRATEGY-AWARE and, above all, CONSERVATIVE:
+the ONE thing it changes automatically is RISK (exposure), never an entry/exit parameter.
+That design choice exists precisely so the loop can never "improve" the bot into the
+ground by tuning the edge away on a handful of noisy trades.
 
-For the ACTIVE strategy `trend_timing_v1` it:
-  1. Reads realised account drawdown (memory/equity_state.json) and walks `trend.exposure`
-     DOWN a discrete ladder for capital preservation when drawdown breaches the soft/deep
-     thresholds, and restores it back toward `base_exposure` after the account recovers.
-     (Exposure is the single risk dial — lowering it cuts both drawdown and return; this is
-     a pure capital-preservation move, never a return-chasing one.)
-  2. MONTHLY (deep run) re-validates that `trend.sma_months` is still in the robust cluster
-     by re-running a lightweight SMA grid on recent data. If the active lookback drifts out
-     of the robust zone it FLAGS it for human review — it never auto-flips a structural
-     parameter (that would be overfitting; see memory/research_notes.md).
+For the ACTIVE strategy `dual_swing+trend_v1` (`_run_dual_adaptive`):
+  1. CAPITAL PRESERVATION (auto) — reads realised account drawdown
+     (memory/equity_state.json) and walks the TREND sleeve's `trend.exposure` DOWN a
+     discrete ladder when drawdown deepens, restoring it after recovery (with hysteresis).
+     Lowering exposure cuts both drawdown and return — a pure safety move.
+  2. SWING PERFORMANCE (alert-only) — analyses the swing trade HISTORY (read-only; the
+     full trades.csv is never modified or pruned) and, ONLY on a meaningful sample
+     (>= 25 closed trades), sends a Telegram ALERT if win rate / profit factor falls
+     through the floor. It changes NOTHING — the human decides whether to adjust.
+  3. MONTHLY (deep) — re-validates `trend.sma_months` against a robust SMA cluster and
+     FLAGS drift for review; never auto-flips a structural parameter (overfitting risk).
 
-Every change is logged to improvements.md + session_snapshots.jsonl AND sent to Telegram.
+Every automatic change (only ever capital preservation) is logged to improvements.md +
+session_snapshots.jsonl AND sent to Telegram.
 
-Legacy strategies (swing_core / meanrev) keep the old score/RR tuning path for the record.
-
-Called only between trading sessions — never during market hours.
+`trend_timing_v1` keeps `_run_trend_adaptive`; legacy swing/meanrev keep the old tuning
+path for the record. Called only between sessions — never during market hours.
 """
 import csv
 import json
@@ -101,9 +104,15 @@ def _ladder_index(ladder: list[float], value: float) -> int:
     return min(range(len(ladder)), key=lambda i: abs(ladder[i] - value))
 
 
-def _run_trend_adaptive(deep: bool) -> dict:
-    """Capital-preservation exposure control + monthly robustness re-validation."""
-    cfg = _load_config()
+def _apply_trend_exposure_control(cfg: dict, deep: bool):
+    """Capital-preservation core: mutate cfg['trend']['exposure'] toward the right ladder
+    rung for the current drawdown, and (deep only) flag SMA robustness drift. Returns
+    (changes, dd, robustness_note). Does NOT save/notify/snapshot — the caller does.
+
+    This is the ONLY thing the loop ever changes automatically: it reduces (or restores)
+    RISK. It never touches an entry/exit parameter — that protects the edge from being
+    tuned away on noise. Shared by the trend-only and dual-strategy paths.
+    """
     trend = cfg.setdefault("trend", {})
     ladder = [float(x) for x in trend.get("derisk_ladder", [1.0, 0.66, 0.33])]
     base = float(trend.get("base_exposure", 1.0))
@@ -115,7 +124,6 @@ def _run_trend_adaptive(deep: bool) -> dict:
     dd = _realised_drawdown_pct()
     idx = _ladder_index(ladder, cur)
     changes: list[str] = []
-    new_exposure = cur
 
     if dd is not None:
         # De-risk: walk DOWN the ladder as drawdown deepens.
@@ -129,9 +137,7 @@ def _run_trend_adaptive(deep: bool) -> dict:
             target_idx = max(0, idx - 1)
 
         target_idx = min(target_idx, len(ladder) - 1)
-        new_exposure = ladder[target_idx]
-        # never exceed base exposure on restore
-        new_exposure = min(new_exposure, base)
+        new_exposure = min(ladder[target_idx], base)  # never exceed base on restore
 
         if abs(new_exposure - cur) > 1e-9:
             direction = "DE-RISK" if new_exposure < cur else "RESTORE"
@@ -155,6 +161,16 @@ def _run_trend_adaptive(deep: bool) -> dict:
                     f"— NOT auto-changed."
                 )
 
+    return changes, dd, robustness_note
+
+
+def _run_trend_adaptive(deep: bool) -> dict:
+    """Trend-only strategy path: capital-preservation exposure control + robustness recheck."""
+    cfg = _load_config()
+    trend = cfg.setdefault("trend", {})
+    cur = float(trend.get("exposure", trend.get("base_exposure", 1.0)))
+    changes, dd, robustness_note = _apply_trend_exposure_control(cfg, deep)
+
     if changes:
         _save_config(cfg)
         _log_improvement("Adaptive (trend_timing_v1)", changes)
@@ -166,9 +182,98 @@ def _run_trend_adaptive(deep: bool) -> dict:
         "strategy": "trend_timing_v1",
         "realised_drawdown_pct": round(dd, 2) if dd is not None else None,
         "exposure": trend.get("exposure", cur),
-        "base_exposure": base,
+        "base_exposure": float(trend.get("base_exposure", 1.0)),
         "sma_months": trend.get("sma_months", 10),
         "changes": changes,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+    if robustness_note:
+        snap["robustness"] = robustness_note
+    _append_snapshot(snap)
+    return snap
+
+
+# ----------------------------------------------------- DUAL (swing + trend)
+# Minimum CLOSED swing trades before we even look at performance — 10 trades is noise
+# for a strategy whose true win rate is ~46%. We never auto-tune entry params; if the
+# sample looks genuinely degraded we ALERT a human and leave the strategy untouched.
+_SWING_MIN_SAMPLE = 25
+_SWING_WINDOW = 50
+_SWING_WR_FLOOR = 0.40        # alert if rolling win rate drops below this
+_SWING_PF_FLOOR = 1.0         # alert if rolling profit factor drops below break-even
+
+
+def _swing_closed_trades() -> list[dict]:
+    """Closed SWING trades only (trend-sleeve rows excluded). Read-only — the full
+    trades.csv history is never modified or pruned, so it stays available for analysis."""
+    return [t for t in _load_closed_trades()
+            if "trend" not in (t.get("notes", "") or "").lower()]
+
+
+def _swing_performance_flag() -> dict:
+    """ALERT-ONLY health check on the swing sleeve. Reads trade history, never writes a
+    single strategy parameter — so it can NEVER nuke the edge. Sends Telegram if the
+    rolling sample looks degraded; otherwise stays silent."""
+    trades = _swing_closed_trades()
+    n = len(trades)
+    if n < _SWING_MIN_SAMPLE:
+        return {"swing_trades": n, "evaluated": False, "flag": False,
+                "note": f"sample {n} < {_SWING_MIN_SAMPLE} — not enough to judge"}
+
+    recent = trades[-_SWING_WINDOW:]
+    pnl = [float(t.get("net_pnl_usd") or 0) for t in recent]
+    wins = [p for p in pnl if p > 0]
+    gross_win = sum(p for p in pnl if p > 0)
+    gross_loss = -sum(p for p in pnl if p < 0)
+    wr = len(wins) / len(recent)
+    pf = (gross_win / gross_loss) if gross_loss > 0 else float("inf")
+
+    flag = (wr < _SWING_WR_FLOOR) or (pf < _SWING_PF_FLOOR)
+    result = {
+        "swing_trades": n, "evaluated": True, "window": len(recent),
+        "win_rate": round(wr, 3), "profit_factor": round(pf, 2) if pf != float("inf") else None,
+        "flag": bool(flag),
+    }
+    if flag:
+        msg = (
+            f"⚠ SWING PERFORMANCE ALERT (review needed — NOTHING was changed)\n"
+            f"Last {len(recent)} swing trades: win rate {wr:.0%}, profit factor "
+            f"{result['profit_factor']}.\n"
+            f"Below the floor (WR {_SWING_WR_FLOOR:.0%} / PF {_SWING_PF_FLOOR:.1f}). "
+            f"The bot does NOT auto-tune the strategy — you decide if/what to adjust."
+        )
+        _notify(msg)
+        _log_improvement("Swing performance FLAG (no change made)", [msg.replace("\n", " ")])
+    return result
+
+
+def _run_dual_adaptive(deep: bool) -> dict:
+    """Active dual_swing+trend_v1 path. Automatic action is LIMITED to capital
+    preservation (trend exposure de-risk). Swing performance is ALERT-ONLY: it analyses
+    the trade history but never modifies a strategy parameter — so the self-improvement
+    loop can reduce risk on its own, but can never silently degrade the edge."""
+    cfg = _load_config()
+    trend = cfg.setdefault("trend", {})
+    cur = float(trend.get("exposure", trend.get("base_exposure", 1.0)))
+
+    # 1. Capital preservation (the only auto-change).
+    changes, dd, robustness_note = _apply_trend_exposure_control(cfg, deep)
+    if changes:
+        _save_config(cfg)
+        _log_improvement("Adaptive (dual_swing+trend_v1 — capital preservation)", changes)
+        _notify("🤖 AUTO-AMÉLIORATION — préservation du capital\n" + "\n".join(f"• {c}" for c in changes))
+
+    # 2. Swing performance — ALERT ONLY, no parameter writes.
+    swing = _swing_performance_flag()
+
+    snap = {
+        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "routine": "weekly" if deep else "review",
+        "strategy": "dual_swing+trend_v1",
+        "realised_drawdown_pct": round(dd, 2) if dd is not None else None,
+        "trend_exposure": trend.get("exposure", cur),
+        "swing": swing,
+        "changes": changes,            # only ever capital-preservation changes
         "ts": datetime.now(timezone.utc).isoformat(),
     }
     if robustness_note:
@@ -301,6 +406,8 @@ def run_adaptive_learning(state: dict, deep: bool = False) -> dict:
     cfg = _load_config()
     strategy = cfg.get("system", {}).get("strategy", "")
     try:
+        if strategy == "dual_swing+trend_v1":
+            return _run_dual_adaptive(deep)
         if strategy == "trend_timing_v1":
             return _run_trend_adaptive(deep)
         return _run_legacy_adaptive(deep)
