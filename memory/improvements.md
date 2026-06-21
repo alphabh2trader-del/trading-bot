@@ -68,3 +68,27 @@ All improvements are appended here. Never delete entries.
   $100k paper account; +10%/month is not achievable within the 8% drawdown mandate.
 
 ---
+
+## 2026-06-21 — Stress test retired RSI-2; deployed trend_timing_v1 (Faber GTAA)
+
+- Built `backtest/verify.py` to stress-test meanrev_rsi2_v1 on the user's concerns:
+  fees+slippage sensitivity, survivorship (ETF-only), parameter robustness, multi-period.
+  **Result: RSI-2 FAILS** — PF 1.29 → ~1.0 at 0.15%/side cost, LOSING on ETF-only at
+  realistic cost, and negative in 2016-2018 & 2022-2024. The earlier 7.4% was inflated by
+  optimistic costs + survivorship-biased stock picks + a favourable 2019-2024 window.
+- Researched and validated a cost-robust replacement (`backtest/momentum.py`): **Faber
+  trend timing** — monthly, hold ETFs above their 10-month SMA, else cash, across 18 ETFs
+  incl. TLT + GLD. Cost-robust (CAGR ~unchanged as cost triples), profitable in every
+  period 2007-2025 (incl. 2008/2022), ~10.5% CAGR / ~24% maxDD / Sharpe 0.79.
+- Established (and documented) that with a fixed Sharpe, exposure/leverage only slides the
+  return/drawdown line: 0.33×→8% DD/3.6%; 1.0×→24% DD/10.5%; 1.5×→34% DD/15.4%. Leverage
+  cannot rescue a thin edge — it only scales a robust one. User chose **1.0× full exposure**.
+- Integrated as ACTIVE: new `strategy/trend_timing.py` (10-month SMA qualification +
+  equal-weight portfolio), `execution/engine.rebalance_portfolio()` (monthly buy/sell to
+  target), monthly-guarded `routines/analysis.py` rebalance with persistent
+  `memory/trend_state.json`. open/midday/afternoon become no-ops (no per-day setups).
+  Universe -> 18 ETFs. Strategy id -> trend_timing_v1 (v3.0). Added tests/test_trend.py.
+- Realistic objective: ~0.84%/month (~10.5%/yr), ~$110,500 after a year on $100k paper,
+  drawdown up to ~24% accepted (paper). For a real funded account, redeploy at ~0.33×.
+
+---

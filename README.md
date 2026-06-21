@@ -6,45 +6,47 @@ An autonomous swing trading system built for prop firm funded accounts. Runs ful
 
 ## What It Does
 
-- Scans 26 liquid US ETFs and large caps every trading day
-- Detects **mean-reversion** swing setups (Connors RSI-2) — buys short-term dips inside an uptrend
-- Manages risk automatically (position sizing, disaster stop, drawdown limits, diversification)
-- Sends trade alerts and daily summaries via Telegram
+- Trades a diversified set of 18 ETFs (equities + bonds + gold) with **trend timing**
+- Each month, holds the ETFs in an uptrend (above their 10-month SMA) and moves the rest to cash
+- This is cost-robust (few trades, big moves) and profitable across every regime since 2008
+- Sends rebalance alerts and summaries via Telegram
 - Saves performance data to git on every run
 - Runs in **paper trading mode** by default before going live
 
 ---
 
-## Strategy — `meanrev_rsi2_v1` (Connors RSI-2 mean reversion)
+## Strategy — `trend_timing_v1` (Faber GTAA trend timing)
 
 | Parameter | Value |
 |---|---|
-| Type | Swing mean reversion, long-only (no day trading) |
-| Universe | 26 liquid ETFs + large caps |
-| Timeframe | Daily |
-| Trend filter | Close > SMA 200 |
-| Entry | Wilder RSI(2) < 10 (oversold), entered next open |
-| Exit | Close > SMA 5, or −8% disaster stop, or 10-day time stop |
-| Risk per trade | 1% of equity (sized vs the 8% stop) |
-| Max open positions | 6 (max 1 per sector) |
-| Max daily loss / total drawdown | 3% / 8% (hard kill-switches) |
+| Type | Trend timing / time-series momentum, long-only |
+| Universe | 18 ETFs — equity index/sector + TLT (bonds) + GLD (gold) |
+| Rebalance | Monthly |
+| Hold rule | Monthly close > 10-month SMA (else that sleeve → cash) |
+| Allocation | Equal weight across held ETFs × exposure |
+| Exposure | 1.0× (full; the single risk dial — 0.33× ≈ 8% DD, 1.5× = leverage) |
+| Backstops | 3% daily / 8% total kill-switches remain active |
 
-### Backtest (yfinance daily, out-of-sample 2019–2024, incl. COVID crash)
+### Backtest — stress-tested (ETF-only = no survivorship bias, 2007–2025, costs on turnover)
 
-| Metric | In-sample (2010–18) | **Out-of-sample (2019–24)** |
-|---|---|---|
-| Win rate | 68.5% | **67.4%** |
-| Profit factor | 1.41 | **1.29** |
-| Portfolio CAGR | — | **~7.4%** |
-| Max drawdown | — | **~7.1%** (under the 8% mandate) |
-| Sharpe | — | **~0.89** |
+| Metric | Value |
+|---|---|
+| CAGR (0.10% → 0.30% cost) | **10.96% → 10.54%** (cost-robust) |
+| Max drawdown | ~24% (vs 51% for buy & hold SPY) |
+| Sharpe | ~0.79 |
+| Profitable periods | **All 6** (2008-10, 2011-15, 2016-18, 2019-21, 2022-24, 2025) |
 
-Reproduce: `python -m backtest.meanrev_report` (integrated) or `python -m backtest.research` (research grid).
+> The previous mean-reversion strategy (`meanrev_rsi2_v1`) was **retired** after a stress
+> test (`backtest/verify.py`) showed its thin edge did not survive realistic fees+slippage
+> or a survivorship-free universe. Trend following was chosen for robustness.
 
-**Realistic objective (on a $100k paper account):** ~0.6% / month on average (~7% / year),
-ending an average month near **$100,600**. Months vary — good ones reach +2–3%, some are
-flat or negative, with drawdowns up to ~7%. This is honest and risk-controlled: +10%/month
-is not achievable without leverage that would breach the 8% drawdown limit.
+Reproduce: `python -m backtest.momentum`.
+
+**Realistic objective (on a $100k paper account, exposure 1.0×):** ~10.5% / year ≈
+~0.84% / month → ~**$110,500 after a year**. Returns are lumpy (flat/negative months happen);
+the yearly figure is the headline. Drawdowns up to ~24% are the deliberate tradeoff for the
+return. Note: trend following wins by asymmetry — per-trade win rate is ~40-45%, not >50%,
+but it is profitable across all market regimes.
 
 ---
 
@@ -78,12 +80,12 @@ is not achievable without leverage that would breach the 8% drawdown limit.
 
 | Time (ET) | Routine | What it does |
 |---|---|---|
-| 07:00 | premarket | Check overnight exits, news/sentiment flags |
-| 08:00 | analysis | Scan universe for RSI-2 mean-reversion setups |
-| 09:00 | plan | Confirm the day's setups |
-| 09:35 | open | Enter setups at market (5-min wait after open) |
-| 10:30 | midday | Rule-based exits (close>SMA5 / stop) |
-| 14:00 | afternoon | Rule-based exits; positions held overnight |
+| 07:00 | premarket | Health check, news/sentiment flags |
+| 08:00 | analysis | **Monthly trend rebalance** (acts once per month; no-op other days) |
+| 09:00 | plan | (no per-day setups under trend timing) |
+| 09:35 | open | (no per-day entries under trend timing) |
+| 10:30 | midday | Position check |
+| 14:00 | afternoon | Position check |
 | 16:00 | review | EOD report + adaptive parameter learning |
 | Saturday 10:00 | weekly | Full weekly report sent to Telegram |
 

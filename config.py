@@ -52,25 +52,27 @@ REQUIRE_VOLUME_CONFIRM = False  # if True, reject setups without volume confirma
 # --- Trade geometry (legacy trend scorer) ---
 TP_R_MULT = 2.0             # take-profit distance as a multiple of risk (R)
 
-# --- Mean reversion (Connors RSI-2) — ACTIVE strategy ---
-MEANREV_RSI_PERIOD = 2      # Wilder RSI period
-MEANREV_RSI_THRESHOLD = 10  # enter long when RSI(2) < this (oversold)
-MEANREV_TREND_SMA = 200     # only trade longs above this SMA (uptrend filter)
-MEANREV_EXIT_SMA = 5        # exit when close rises back above this SMA
-MEANREV_STOP_PCT = 0.08     # disaster stop: exit if price <= entry*(1-this)
-MEANREV_MAX_HOLD = 10       # force-exit after this many sessions
+# --- Mean reversion (Connors RSI-2) — RETIRED: failed cost/survivorship stress test ---
+MEANREV_RSI_PERIOD = 2
+MEANREV_RSI_THRESHOLD = 10
+MEANREV_TREND_SMA = 200
+MEANREV_EXIT_SMA = 5
+MEANREV_STOP_PCT = 0.08
+MEANREV_MAX_HOLD = 10
 
-# --- Watchlist ---
-# Mean reversion works best on liquid index/sector ETFs; large caps included too.
-ETF_WATCHLIST = [
-    "SPY", "QQQ", "IWM", "DIA", "XLF", "XLK", "XLE", "XLV",
-    "XLY", "XLP", "XLI", "XLU", "XLB", "SMH", "XBI", "KRE",
+# --- Trend timing (Faber GTAA) — ACTIVE strategy ---
+TREND_SMA_MONTHS = 10       # hold ETF when monthly close > 10-month SMA
+TREND_SMA_DAYS = 200        # ~10 months, used for the minimum-history check
+TREND_EXPOSURE = 1.0        # 1.0 = full; <1 de-risk, >1 leverage (scales return AND drawdown)
+
+# --- Universe ---
+# Trend timing trades a diversified ETF set: equity index/sector + bonds (TLT) + gold (GLD).
+# The defensive sleeves (TLT, GLD) cut drawdown by trending up when equities fall.
+TREND_UNIVERSE = [
+    "SPY", "QQQ", "IWM", "DIA", "XLF", "XLK", "XLE", "XLV", "XLY",
+    "XLP", "XLI", "XLU", "XLB", "SMH", "XBI", "KRE", "TLT", "GLD",
 ]
-STOCK_WATCHLIST = [
-    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL",
-    "META", "TSLA", "JPM", "V", "UNH",
-]
-BASE_WATCHLIST = ETF_WATCHLIST + STOCK_WATCHLIST
+BASE_WATCHLIST = TREND_UNIVERSE
 
 SECTOR_MAP = {
     # ETFs (each its own "sector" bucket so concurrency caps still apply sensibly)

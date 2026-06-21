@@ -76,6 +76,79 @@ def open_paper_trade(setup: dict, risk_multiplier: float = 1.0) -> dict:
     return trade
 
 
+def _price(symbol: str) -> float:
+    """Latest tradable price: live quote mid, else last daily close."""
+    try:
+        return float(get_live_quote(symbol)["mid"])
+    except Exception:
+        from data.market_data import fetch_bars_safe
+        df = fetch_bars_safe(symbol, "1Day", timeout_sec=3.0)
+        return float(df["close"].iloc[-1]) if df is not None and not df.empty else 0.0
+
+
+def _log_trend_open(symbol: str, price: float, qty: float, weight: float, order_id: str) -> None:
+    trade = {k: "" for k in FIELDNAMES}
+    trade.update({
+        "trade_id": str(uuid.uuid4())[:8],
+        "timestamp": datetime.utcnow().isoformat(),
+        "symbol": symbol, "direction": "long",
+        "entry_price": round(price, 4), "stop_loss": "", "take_profit": "",
+        "position_size": qty, "risk_pct": round(weight * 100, 2),
+        "status": "open", "alpaca_order_id": order_id,
+        "notes": f"trend | weight {weight:.3f}",
+    })
+    _append_trade(trade)
+
+
+def rebalance_portfolio(target_weights: dict) -> dict:
+    """Monthly trend-timing rebalance: liquidate holdings that left the uptrend,
+    open equal-weight positions in ETFs that entered it. Existing in-trend holdings
+    are kept (lower turnover/cost)."""
+    from src.execution.alpaca_bridge import get_account, get_positions, submit_market_order, close_position
+
+    equity = get_account()["equity"]
+    held = {p["symbol"] for p in get_positions()}
+    actions = {"bought": [], "sold": [], "held": []}
+
+    # 1. Sell what is no longer in the target (trend broke down)
+    for symbol in list(held):
+        if symbol in target_weights:
+            actions["held"].append(symbol)
+            continue
+        try:
+            close_position(symbol)
+        except Exception:
+            pass
+        for t in get_open_trades_by_symbol(symbol):
+            close_paper_trade(t["trade_id"], _price(symbol), "trend exit (below 10m SMA)")
+        actions["sold"].append(symbol)
+
+    # 2. Buy ETFs that newly entered an uptrend, at their target weight
+    for symbol, weight in target_weights.items():
+        if symbol in held:
+            continue
+        price = _price(symbol)
+        if price <= 0:
+            continue
+        qty = round((equity * weight) / price, 4)
+        if qty <= 0:
+            continue
+        try:
+            order = submit_market_order(symbol, qty, "long")
+            order_id = order["order_id"]
+        except Exception as e:
+            order_id = f"ERROR:{e}"
+        _log_trend_open(symbol, price, qty, weight, order_id)
+        actions["bought"].append(symbol)
+
+    return actions
+
+
+def get_open_trades_by_symbol(symbol: str) -> list[dict]:
+    return [t for t in _load_all_trades()
+            if t.get("symbol") == symbol and t.get("status") == "open"]
+
+
 def close_paper_trade(trade_id: str, exit_price: float, outcome: str) -> dict | None:
     trades = _load_all_trades()
     updated = None

@@ -1,73 +1,70 @@
-# CURRENT ACTIVE STRATEGY — v2.0
+# CURRENT ACTIVE STRATEGY — v3.0
 
 ## Version
 
-- ID: meanrev_rsi2_v1
+- ID: trend_timing_v1
 - Created: 2026-06-21
 - Status: ACTIVE (paper trading)
-- Replaces: swing_core_v1 (trend pullback — backtested NEGATIVE, retired; see strategy_history.md)
+- Replaces: meanrev_rsi2_v1 (RETIRED — failed the cost/survivorship/multi-period
+  stress test; ~0.2%/trade edge eroded by realistic fees+slippage. See history.)
 
 ## Strategy Type
 
-Short-term swing **mean reversion** (Connors RSI-2 family), long-only. NO day trading
-(positions are held overnight, exit on a daily rule). NO counter-trend shorts.
+**Trend timing** (Faber GTAA / time-series momentum), long-only, MONTHLY rebalance.
+Few trades, large moves captured → transaction costs are negligible, unlike the
+short-hold mean-reversion that preceded it.
 
-## Universe
+## Universe (18 ETFs)
 
-26 liquid symbols: index/sector ETFs (SPY, QQQ, IWM, DIA, XLF, XLK, XLE, XLV, XLY,
-XLP, XLI, XLU, XLB, SMH, XBI, KRE) + large caps (AAPL, MSFT, NVDA, AMZN, GOOGL, META,
-TSLA, JPM, V, UNH). Mean reversion is strongest on liquid ETFs.
+Equity index/sector (SPY, QQQ, IWM, DIA, XLF, XLK, XLE, XLV, XLY, XLP, XLI, XLU, XLB,
+SMH, XBI, KRE) + **TLT (long bonds)** + **GLD (gold)**. The defensive sleeves trend up
+when equities fall, which roughly halves drawdown vs buy & hold.
 
-## Rules (daily bars)
+## Rules (monthly)
 
-ENTRY (long):
-- Close > SMA(200)  — only buy dips inside an uptrend
-- Wilder RSI(2) < 10 — short-term oversold
-- Entered at the next session's open (market order)
-
-EXIT (whichever first):
-- Close > SMA(5)  — primary, rule-based (mean reversion completed)
-- Price <= entry × 0.92  — disaster stop (-8%)
-- Held >= 10 sessions  — time stop
+- For each ETF: HOLD if monthly close > its 10-month SMA (uptrend); else that sleeve = CASH.
+- Capital split EQUALLY across the held ETFs, scaled by EXPOSURE (deployed at 1.0×).
+- Rebalanced once per calendar month (first trading day). No intraday management.
 
 ## Risk Management
 
-- 1% account risk per trade, sized against the 8% disaster stop (~12.5% equity/position)
-- Max 6 concurrent positions, max 1 per sector bucket (diversification)
-- Total risk exposure cap: 6%
-- Daily kill-switch: 3% | Total drawdown kill-switch: 8% (enforced in risk_engine)
-- EXTREME market regime (SPY) and news/earnings/sentiment filters block new entries
+- Exposure 1.0× (full strategy, no leverage). Drawdown ~24% is accepted (paper account).
+  Exposure is the single risk dial: 0.33× → ~8% DD; 1.5× (leverage) → ~34% DD.
+- Diversification across 18 uncorrelated-ish ETFs incl. bonds & gold.
+- Daily 3% / total 8% kill-switches remain active as hard backstops.
 
-## Validation Status
+## Validation — passed the FULL stress test (this is why it was chosen)
 
-- Backtested: YES — train 2010-2018 + OUT-OF-SAMPLE test 2019-2024 (incl. COVID crash)
-- Paper traded: starting now
-- Live traded: NO (unlock per CLAUDE.md: win rate >= 60% over 30d, DD < 8%, >= 10 trades)
+Tested ETF-only (NO survivorship bias), 2007-2025, costs charged on turnover:
 
-### Backtest results (yfinance daily, next-open entry, 0.05%/side slippage)
+- **Cost-robust**: CAGR 10.96% (0.10% cost) → 10.54% (0.30% cost) — barely moves.
+- **Profitable in EVERY period** (0.30% cost): 2008-10 +6.0%, 2011-15 +10.0%, 2016-18 +9.4%,
+  2019-21 +21.1%, 2022-24 +10.4%, 2025 +14.8%.
+- **vs Buy & Hold SPY**: SPY = 10.6% CAGR / 50.8% maxDD; this = ~10.5% CAGR / ~24% maxDD
+  (similar return, HALF the drawdown), Sharpe ~0.79.
 
-Per-trade edge (26 symbols):
-- TRAIN 2010-2018: 1830 trades, 68.5% win, PF 1.41
-- TEST 2019-2024 (OOS): 1064 trades, **67.4% win, PF 1.29**, +0.23%/trade
+NOTE: trend following wins by asymmetry — per-trade win rate is ~40-45% (NOT >50%), but it
+is profitable across all regimes, which is the real robustness test.
 
-Portfolio (OOS, deployed config — 6 positions, 1% risk):
-- **CAGR ~7.4% | max drawdown ~7.1% | Sharpe ~0.89**
+Reproduce: `python -m backtest.momentum` (full) or `python -m backtest.verify` (cost/
+survivorship/period stress on the old RSI-2, for the record).
 
-The edge holds out-of-sample. Win rate (67%) exceeds the 55-60% target; drawdown (7.1%)
-is within the 8% mandate. Reproduce with `python -m backtest.meanrev_report`.
-
-## REALISTIC OBJECTIVE (paper account)
+## REALISTIC OBJECTIVE (paper account, exposure 1.0×)
 
 Assuming the Alpaca paper default of **$100,000**:
 
-- Expected average: **~0.6% / month (~7% / year)** — i.e. ~**+$600 in an average month**,
-  ending the month around **$100,600**; ~$107,000 after a year.
-- This is an AVERAGE: individual months vary widely. Good months can be +2-3%
-  (~+$2,000-3,000); some months are flat or negative. Expect drawdowns up to ~7%.
-- NOT a guarantee. Backtested edge ≠ future returns. The target is honest and
-  risk-controlled, not a get-rich number — +10%/month is not achievable without
-  leverage that would breach the 8% drawdown limit and risk the funded account.
+- Expected average: **~10.5% / year ≈ ~0.84% / month** — about **+$840 in an average month**,
+  ending a year near **$110,500**.
+- Returns are LUMPY: trend strategies have flat/negative months (down ~3-5%) and strong
+  months (+5-8%). The headline is the yearly figure, not any single month.
+- Expect drawdowns up to **~24%** (this is the deliberate tradeoff for the higher return;
+  the user chose full exposure on a paper account).
+- NOT a guarantee — backtest edge ≠ future returns, but this edge held across 2007-2025
+  including the 2008 crash and 2022 bear, net of costs and free of survivorship bias.
 
-To push returns higher one would raise position count or per-trade risk, but the
-backtest shows that pushes max drawdown above 8% (prop-firm account-ending) — so the
-deployed config deliberately caps risk at the mandate.
+## Validation Status
+
+- Backtested: YES (2007-2025, cost+survivorship+multi-period robust)
+- Paper traded: starting now
+- Live traded: NO (unlock per CLAUDE.md; note: 24% DD exceeds an 8% funded-account limit —
+  for a real funded account, redeploy at exposure ~0.33×)

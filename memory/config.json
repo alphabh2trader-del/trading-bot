@@ -1,8 +1,8 @@
 {
   "system": {
     "mode": "paper",
-    "version": "2.0",
-    "strategy": "meanrev_rsi2_v1",
+    "version": "3.0",
+    "strategy": "trend_timing_v1",
     "initialized": "2026-06-19"
   },
   "risk": {

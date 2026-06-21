@@ -1,13 +1,15 @@
-"""ANALYSIS — 08:00 ET: scan watchlist for Connors RSI-2 mean-reversion setups.
+"""ANALYSIS — monthly trend-timing rebalance (Faber GTAA).
 
-Signals are computed on completed daily bars; entries are taken at the next
-session by the `open` routine. The EXTREME-regime guard still blocks all new
-trades during market panics (capital preservation).
+Runs daily at 08:00 ET but only acts once per calendar month: it holds the ETFs
+whose monthly close is above their 10-month SMA (equal weight, scaled by
+TREND_EXPOSURE) and moves the rest to cash. Market orders queue for the open.
 """
+from datetime import date
+
+import config
 from data.market_data import fetch_bars_safe
-from data.universe import get_watchlist
-from strategy.regime import get_regime
-from strategy.mean_reversion import build_plan
+from strategy.trend_timing import target_portfolio, last_rebalance_month, mark_rebalanced
+from execution.engine import rebalance_portfolio
 from reporting.telegram import send_message
 
 
@@ -16,24 +18,20 @@ def _fetch_daily(symbol: str):
 
 
 def run(state: dict) -> None:
-    # 1. Market regime from SPY — block new entries in EXTREME conditions
-    spy_d1 = fetch_bars_safe("SPY", "1Day", timeout_sec=3.0)
-    regime = get_regime(spy_d1) if spy_d1 is not None else "NORMAL"
-    state["regime"] = regime
+    state["setups"] = []  # trend timing has no per-day setups; open/midday/afternoon are no-ops
 
-    if regime == "EXTREME":
-        send_message("ANALYSIS: Market regime = EXTREME. No new trades today.")
-        state["setups"] = []
-        return
+    this_month = date.today().strftime("%Y-%m")
+    if last_rebalance_month() == this_month:
+        return  # already rebalanced this month
 
-    # 2. Scan for oversold mean-reversion setups (top N by conviction)
-    watchlist = get_watchlist(state)
-    setups = build_plan(watchlist, _fetch_daily)
-    state["setups"] = setups
+    target = target_portfolio(config.TREND_UNIVERSE, _fetch_daily)
+    actions = rebalance_portfolio(target)
+    mark_rebalanced(this_month, list(target.keys()))
+    state["holdings"] = list(target.keys())
 
-    if not setups:
-        send_message(f"ANALYSIS done. Regime: {regime}. No oversold setups today.")
-        return
-
-    summary = " | ".join(f"{s['symbol']} RSI{s['rsi_value']} (sc {s['score']})" for s in setups)
-    send_message(f"ANALYSIS done. Regime: {regime}. {len(setups)} setup(s): {summary}")
+    held = ", ".join(target.keys()) if target else "ALL CASH (no ETF in uptrend)"
+    send_message(
+        f"📅 MONTHLY REBALANCE — {this_month} (exposure {config.TREND_EXPOSURE}x)\n"
+        f"Holding {len(target)} ETFs: {held}\n"
+        f"Bought {len(actions['bought'])} | Sold {len(actions['sold'])} | Kept {len(actions['held'])}"
+    )
