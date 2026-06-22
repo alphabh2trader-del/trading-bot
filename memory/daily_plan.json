@@ -4,7 +4,7 @@
   "daily_drawdown": 0.0,
   "regime": "NORMAL",
   "news_blocked": false,
-  "sentiment_score": null,
+  "sentiment_score": 0.12,
   "sentiment_block": false,
   "sentiment_reduce": false,
   "setups": [],
@@ -13,7 +13,12 @@
   "losses_today": 0,
   "exposure_pct": 0.0,
   "open_sectors": [],
-  "perplexity_calls_today": 0,
+  "perplexity_calls_today": 2,
   "skipped_tickers": [],
-  "watchlist": []
+  "watchlist": [
+    "AMZN",
+    "NFLX",
+    "JPM",
+    "V"
+  ]
 }
