@@ -129,9 +129,19 @@ def rebalance_portfolio(target_weights: dict, protect: set | None = None,
 
     protect = protect or set()
     band = float(getattr(config, "REBALANCE_BAND", 0.15))
-    equity = get_account()["equity"]
+    try:
+        equity = get_account()["equity"]
+    except Exception as e:
+        raise RuntimeError(f"rebalance_portfolio: get_account() failed — {e}") from e
     capital_base = equity * float(capital_frac)
-    positions = {p["symbol"]: p for p in get_positions()}
+    try:
+        raw_positions = get_positions()
+    except Exception as e:
+        raise RuntimeError(f"rebalance_portfolio: get_positions() failed — {e}") from e
+    positions = {
+        p["symbol"]: p for p in raw_positions
+        if p.get("market_value") is not None
+    }
     actions = {"bought": [], "sold": [], "resized": [], "held": [], "protected": []}
 
     for symbol in sorted(set(target_weights) | set(positions)):

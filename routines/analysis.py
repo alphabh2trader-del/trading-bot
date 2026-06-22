@@ -66,7 +66,10 @@ def run(state: dict) -> None:
 
     # ---------------------------------------------------------------- TREND sleeve
     if config.TREND_TIMING_ENABLED:
-        _rebalance_trend(state)
+        try:
+            _rebalance_trend(state)
+        except Exception as exc:
+            send_message(f"ERROR: trend rebalance crashed — {exc}. Analysis job continues.")
 
 
 def _rebalance_trend(state: dict) -> None:
