@@ -1,10 +1,10 @@
 {
-  "date": "2026-06-22",
+  "date": "2026-06-23",
   "kill_switch": "ARMED",
   "daily_drawdown": 0.0,
   "regime": "NORMAL",
-  "news_blocked": false,
-  "sentiment_score": 0.12,
+  "news_blocked": true,
+  "sentiment_score": 0.65,
   "sentiment_block": false,
   "sentiment_reduce": false,
   "setups": [],
